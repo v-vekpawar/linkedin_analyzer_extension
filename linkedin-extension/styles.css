@@ -1,0 +1,494 @@
+/**
+ * LinkedIn Profile Analyzer — Chrome Extension Styles
+ * ====================================================
+ * All selectors are prefixed with "lia-" to avoid collisions with LinkedIn's CSS.
+ */
+
+/* ══════════════════════════════════════════════════
+   CSS CUSTOM PROPERTIES
+   ══════════════════════════════════════════════════ */
+:root {
+  --lia-primary:     #0A66C2;
+  --lia-primary-dk:  #004182;
+  --lia-accent:      #057642;
+  --lia-bg:          #ffffff;
+  --lia-bg-muted:    #f4f6f8;
+  --lia-text:        #1d2226;
+  --lia-text-muted:  #666666;
+  --lia-border:      #e8e8e8;
+  --lia-shadow:      0 8px 32px rgba(0, 0, 0, 0.18);
+  --lia-radius:      12px;
+  --lia-radius-sm:   8px;
+  --lia-sidebar-w:   380px;
+  --lia-ease:        cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ══════════════════════════════════════════════════
+   FLOATING ACTION BUTTON (FAB)
+   ══════════════════════════════════════════════════ */
+#lia-fab {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 999998;
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border: none;
+  border-radius: 50px;
+  background: linear-gradient(135deg, var(--lia-primary), var(--lia-primary-dk));
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(10, 102, 194, 0.45);
+  transition: all 0.3s var(--lia-ease);
+  user-select: none;
+}
+
+#lia-fab:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 8px 28px rgba(10, 102, 194, 0.55);
+}
+
+#lia-fab:active {
+  transform: translateY(0) scale(0.98);
+}
+
+#lia-fab svg { flex-shrink: 0; }
+
+/* ══════════════════════════════════════════════════
+   OVERLAY
+   ══════════════════════════════════════════════════ */
+#lia-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 999998;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s var(--lia-ease);
+  backdrop-filter: blur(2px);
+}
+
+#lia-overlay.lia-overlay-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ══════════════════════════════════════════════════
+   SIDEBAR
+   ══════════════════════════════════════════════════ */
+#lia-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: var(--lia-sidebar-w);
+  height: 100vh;
+  z-index: 999999;
+
+  background: var(--lia-bg);
+  box-shadow: var(--lia-shadow);
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--lia-text);
+
+  transform: translateX(100%);
+  transition: transform 0.35s var(--lia-ease);
+  overflow: hidden;
+}
+
+#lia-sidebar.lia-sidebar-visible {
+  transform: translateX(0);
+}
+
+/* ── Header ── */
+.lia-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--lia-border);
+  background: var(--lia-bg);
+  flex-shrink: 0;
+}
+
+.lia-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lia-header-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--lia-text);
+}
+
+.lia-close-btn {
+  background: none;
+  border: none;
+  font-size: 26px;
+  color: var(--lia-text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.lia-close-btn:hover {
+  background: var(--lia-bg-muted);
+  color: var(--lia-text);
+}
+
+/* ── Profile Mini Card ── */
+.lia-profile-mini {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--lia-border);
+  background: var(--lia-bg-muted);
+  flex-shrink: 0;
+}
+
+.lia-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--lia-primary), var(--lia-primary-dk));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.lia-profile-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--lia-text);
+  line-height: 1.3;
+}
+
+.lia-profile-headline {
+  font-size: 12px;
+  color: var(--lia-text-muted);
+  line-height: 1.4;
+  margin-top: 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Tabs ── */
+.lia-tabs {
+  display: flex;
+  border-bottom: 2px solid var(--lia-border);
+  padding: 0 20px;
+  flex-shrink: 0;
+  background: var(--lia-bg);
+}
+
+.lia-tab-btn {
+  flex: 1;
+  padding: 12px 8px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lia-text-muted);
+  cursor: pointer;
+  transition: all 0.25s var(--lia-ease);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lia-tab-btn:hover {
+  color: var(--lia-primary);
+}
+
+.lia-tab-btn.active {
+  color: var(--lia-primary);
+  border-bottom-color: var(--lia-primary);
+}
+
+/* ── Scrollable Body ── */
+.lia-sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.lia-sidebar-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.lia-sidebar-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.lia-sidebar-body::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 10px;
+}
+
+/* ── Tab Panels ── */
+.lia-tab-panel {
+  display: none;
+}
+
+.lia-tab-panel.active {
+  display: block;
+  animation: lia-fadeIn 0.3s var(--lia-ease);
+}
+
+@keyframes lia-fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Cards ── */
+.lia-card {
+  background: var(--lia-bg);
+  border: 1px solid var(--lia-border);
+  border-radius: var(--lia-radius-sm);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.lia-card h4 {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--lia-text-muted);
+  margin: 0 0 10px 0;
+}
+
+.lia-card p {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--lia-text);
+  margin: 0;
+}
+
+.lia-highlight-card {
+  background: linear-gradient(135deg, #fffbec, #fef3cd);
+  border-color: #f0d060;
+}
+
+/* ── Badge ── */
+.lia-badge {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 50px;
+  background: linear-gradient(135deg, #e8f4fd, #d1ecf9);
+  color: var(--lia-primary);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 16px;
+}
+
+/* ── Chips (skills/strengths) ── */
+.lia-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lia-chip {
+  display: inline-flex;
+  padding: 5px 12px;
+  border-radius: 50px;
+  background: var(--lia-bg-muted);
+  color: var(--lia-text);
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--lia-border);
+  transition: all 0.2s;
+}
+
+.lia-chip:hover {
+  background: #e8f4fd;
+  border-color: var(--lia-primary);
+  color: var(--lia-primary);
+}
+
+/* ── Outreach Angles ── */
+.lia-angle {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--lia-border);
+}
+
+.lia-angle:last-child { border-bottom: none; }
+
+.lia-angle strong {
+  font-size: 13px;
+  color: var(--lia-primary);
+}
+
+.lia-angle p {
+  font-size: 13px;
+  color: var(--lia-text-muted);
+  margin: 4px 0 0;
+  line-height: 1.5;
+}
+
+/* ── Message Templates ── */
+.lia-message-block {
+  margin-bottom: 16px;
+}
+
+.lia-msg-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--lia-primary);
+  margin-bottom: 6px;
+}
+
+.lia-msg-body {
+  position: relative;
+  background: var(--lia-bg-muted);
+  border-radius: var(--lia-radius-sm);
+  padding: 14px;
+  padding-right: 40px;
+}
+
+.lia-msg-body p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--lia-text);
+  margin: 0;
+}
+
+.lia-copy-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: 1px solid var(--lia-border);
+  border-radius: 6px;
+  padding: 5px 7px;
+  cursor: pointer;
+  color: var(--lia-text-muted);
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lia-copy-btn:hover {
+  background: var(--lia-bg);
+  border-color: var(--lia-primary);
+  color: var(--lia-primary);
+}
+
+/* ══════════════════════════════════════════════════
+   LOADING STATE
+   ══════════════════════════════════════════════════ */
+.lia-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.lia-loading p {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--lia-text);
+  margin: 20px 0 6px;
+}
+
+.lia-loading-sub {
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  color: var(--lia-text-muted) !important;
+}
+
+.lia-spinner {
+  width: 44px;
+  height: 44px;
+  border: 4px solid var(--lia-border);
+  border-top-color: var(--lia-primary);
+  border-radius: 50%;
+  animation: lia-spin 0.8s linear infinite;
+}
+
+@keyframes lia-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ══════════════════════════════════════════════════
+   ERROR STATE
+   ══════════════════════════════════════════════════ */
+.lia-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.lia-error p {
+  font-size: 14px;
+  color: var(--lia-text);
+  line-height: 1.6;
+  margin: 20px 0;
+  max-width: 280px;
+}
+
+.lia-retry-btn {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 50px;
+  background: var(--lia-primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s;
+}
+
+.lia-retry-btn:hover {
+  background: var(--lia-primary-dk);
+  transform: translateY(-1px);
+}
+
+/* ══════════════════════════════════════════════════
+   RESPONSIVE (small screens)
+   ══════════════════════════════════════════════════ */
+@media (max-width: 500px) {
+  #lia-sidebar {
+    width: 100vw;
+  }
+  #lia-fab span {
+    display: none;
+  }
+  #lia-fab {
+    padding: 14px;
+    border-radius: 50%;
+  }
+}
