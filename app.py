@@ -10,6 +10,7 @@ import os, logging
 from summarizer import analyze_profile
 from config import FLASK_ENV, FLASK_DEBUG, SQLALCHEMY_DATABASE_URI, SQLALCHEMY_TRACK_MODIFICATIONS
 from models import db
+from cache import get_cached_analysis, store_analysis, cleanup_expired
 from dotenv import load_dotenv
 
 # ──────────────────────── Logging ────────────────────────
@@ -62,6 +63,7 @@ def create_flask_app():
 
     with app.app_context():
         db.create_all()
+        cleanup_expired()   # purge stale cache rows on startup
 
     # Allow requests from the Chrome Extension (and localhost for dev)
     CORS(app, resources={r"/analyze": {"origins": "*"}})
@@ -106,6 +108,21 @@ def create_flask_app():
             if err:
                 return jsonify({"error": f"profile_data validation failed: {err}"}), 400
 
+            # ── Cache lookup (if profile_url provided) ──
+            profile_url = data.get("profile_url", "")
+            if profile_url:
+                cached = get_cached_analysis(profile_url)
+                if cached and analysis_mode in cached:
+                    logger.info("Returning cached %s for %s", analysis_mode, profile_data["name"])
+                    return jsonify({
+                        "result": cached[analysis_mode],
+                        "mode": analysis_mode,
+                        "profile_name": cached.get("profile_name", profile_data["name"]),
+                        "model": cached.get("model", ""),
+                        "generated_at": cached.get("generated_at", ""),
+                        "cached": True,
+                    }), 200
+
             # ── For compatibility_score, also require user_data ──
             user_data = None
             if analysis_mode == "compatibility_score":
@@ -122,6 +139,23 @@ def create_flask_app():
 
             if not result or result.get("error"):
                 return jsonify({"error": "LLM analysis failed. Check your Gemini API key."}), 500
+
+            # ── Store in cache (non-blocking, best-effort) ──
+            if profile_url and result.get("result"):
+                try:
+                    # Build cache-friendly dicts — store per-mode result
+                    # Full unified caching comes in Phase 4
+                    store_analysis(
+                        profile_url=profile_url,
+                        profile_name=profile_data["name"],
+                        about_profile=result["result"] if analysis_mode == "about_profile" else {},
+                        approach_person=result["result"] if analysis_mode == "approach_person" else {},
+                        compatibility_score=result["result"] if analysis_mode == "compatibility_score" else None,
+                        user_id=data.get("user_id"),
+                        model=result.get("model", ""),
+                    )
+                except Exception as cache_err:
+                    logger.warning("Cache store failed (non-fatal): %s", cache_err)
 
             return jsonify(result), 200
 

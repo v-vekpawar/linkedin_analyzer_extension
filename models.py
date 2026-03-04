@@ -4,7 +4,7 @@ LinkedIn Profile Analyzer — Database Models
 SQLAlchemy models for user profiles and analysis caching.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 import json
 
@@ -28,9 +28,9 @@ class UserProfile(db.Model):
     skills = db.Column(db.Text, default="[]")               # JSON-serialized
     education = db.Column(db.Text, default="[]")            # JSON-serialized
     certifications = db.Column(db.Text, default="[]")       # JSON-serialized
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc),
-                           onupdate=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow,
+                           onupdate=datetime.utcnow)
 
     def to_profile_dict(self):
         """Return profile data in the same shape the LLM expects."""
@@ -61,13 +61,13 @@ class AnalysisCache(db.Model):
     compatibility_score = db.Column(db.Text, nullable=True)     # JSON-serialized (nullable)
     user_id = db.Column(db.String(36), nullable=True)
     model = db.Column(db.String(50), default="")
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime, nullable=False, index=True,
-                           default=lambda: datetime.now(timezone.utc) + timedelta(days=CACHE_TTL_DAYS))
+                           default=lambda: datetime.utcnow() + timedelta(days=CACHE_TTL_DAYS))
 
     @property
     def is_expired(self):
-        return datetime.now(timezone.utc) > self.expires_at
+        return datetime.utcnow() > self.expires_at
 
     def to_result_dict(self):
         """Deserialize cached JSON columns into a response dict."""
