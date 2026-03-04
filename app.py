@@ -6,11 +6,11 @@ runs LLM analysis via Gemini, and returns structured results.
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import os, logging
-from summarizer import analyze_profile
+import os, logging, json
+from summarizer import analyze_profile_unified
 from config import FLASK_ENV, FLASK_DEBUG, SQLALCHEMY_DATABASE_URI, SQLALCHEMY_TRACK_MODIFICATIONS
-from models import db
-from cache import get_cached_analysis, store_analysis, cleanup_expired
+from models import db, UserProfile
+from cache import get_cached_analysis, store_analysis, invalidate_user_cache, cleanup_expired
 from dotenv import load_dotenv
 
 # ──────────────────────── Logging ────────────────────────
@@ -66,7 +66,10 @@ def create_flask_app():
         cleanup_expired()   # purge stale cache rows on startup
 
     # Allow requests from the Chrome Extension (and localhost for dev)
-    CORS(app, resources={r"/analyze": {"origins": "*"}})
+    CORS(app, resources={
+        r"/analyze": {"origins": "*"},
+        r"/save-user-profile": {"origins": "*"},
+    })
 
     # ───────────────── Health-check ─────────────────
     @app.route("/")
@@ -75,17 +78,18 @@ def create_flask_app():
             "status": "ok",
             "message": "LinkedIn Profile Analyzer API is running.",
             "endpoints": {
-                "POST /analyze": "Send profile JSON to get AI analysis."
+                "POST /analyze": "Send profile JSON to get unified AI analysis.",
+                "POST /save-user-profile": "Save your LinkedIn profile for compatibility scoring.",
             }
         })
 
-    # ───────────────── Main analysis endpoint ─────────────────
+    # ───────────────── Unified analysis endpoint ─────────────────
     @app.route("/analyze", methods=["POST"])
     def analyze():
         """
         POST /analyze
-        Accepts JSON body with profile data + analysis_mode.
-        Returns structured AI analysis.
+        Accepts JSON body with profile_data, profile_url, and optional user_id.
+        Returns unified AI analysis (about_profile + approach_person + compatibility_score).
         """
         try:
             # ── Guard: API key must be configured ──
@@ -97,61 +101,46 @@ def create_flask_app():
             if data is None:
                 return jsonify({"error": "Invalid or missing JSON body."}), 400
 
-            # ── Extract analysis mode ──
-            analysis_mode = data.get("analysis_mode", "about_profile")
-            valid_modes = ["about_profile", "approach_person", "compatibility_score"]
-            if analysis_mode not in valid_modes:
-                return jsonify({"error": f"Invalid analysis_mode. Must be one of: {valid_modes}"}), 400
-
             # ── Validate target profile data ──
             profile_data, err = validate_profile_data(data.get("profile_data"))
             if err:
                 return jsonify({"error": f"profile_data validation failed: {err}"}), 400
 
-            # ── Cache lookup (if profile_url provided) ──
             profile_url = data.get("profile_url", "")
+            user_id = data.get("user_id", "")
+
+            # ── Cache lookup ──
             if profile_url:
                 cached = get_cached_analysis(profile_url)
-                if cached and analysis_mode in cached:
-                    logger.info("Returning cached %s for %s", analysis_mode, profile_data["name"])
-                    return jsonify({
-                        "result": cached[analysis_mode],
-                        "mode": analysis_mode,
-                        "profile_name": cached.get("profile_name", profile_data["name"]),
-                        "model": cached.get("model", ""),
-                        "generated_at": cached.get("generated_at", ""),
-                        "cached": True,
-                    }), 200
+                if cached:
+                    logger.info("Returning cached analysis for %s", profile_data["name"])
+                    return jsonify(cached), 200
 
-            # ── For compatibility_score, also require user_data ──
+            # ── Resolve user profile for compatibility scoring ──
             user_data = None
-            if analysis_mode == "compatibility_score":
-                user_data, u_err = validate_profile_data(data.get("user_data"))
-                if u_err:
-                    return jsonify({"error": f"user_data validation failed: {u_err}"}), 400
+            if user_id:
+                user_profile = UserProfile.query.filter_by(user_id=user_id).first()
+                if user_profile:
+                    user_data = user_profile.to_profile_dict()
+                    logger.info("User profile found for compatibility: %s", user_data["name"])
 
-            # ── Run LLM analysis ──
-            logger.info("Running analysis: mode=%s, target=%s", analysis_mode, profile_data["name"])
-            if analysis_mode == "compatibility_score":
-                result = analyze_profile(profile_data, analysis_mode, user_data=user_data)
-            else:
-                result = analyze_profile(profile_data, analysis_mode)
+            # ── Run unified LLM analysis (single Gemini call) ──
+            logger.info("Running unified analysis for %s", profile_data["name"])
+            result = analyze_profile_unified(profile_data, user_data=user_data)
 
             if not result or result.get("error"):
                 return jsonify({"error": "LLM analysis failed. Check your Gemini API key."}), 500
 
-            # ── Store in cache (non-blocking, best-effort) ──
-            if profile_url and result.get("result"):
+            # ── Store in cache (best-effort) ──
+            if profile_url:
                 try:
-                    # Build cache-friendly dicts — store per-mode result
-                    # Full unified caching comes in Phase 4
                     store_analysis(
                         profile_url=profile_url,
                         profile_name=profile_data["name"],
-                        about_profile=result["result"] if analysis_mode == "about_profile" else {},
-                        approach_person=result["result"] if analysis_mode == "approach_person" else {},
-                        compatibility_score=result["result"] if analysis_mode == "compatibility_score" else None,
-                        user_id=data.get("user_id"),
+                        about_profile=result.get("about_profile", {}),
+                        approach_person=result.get("approach_person", {}),
+                        compatibility_score=result.get("compatibility_score"),
+                        user_id=user_id or None,
                         model=result.get("model", ""),
                     )
                 except Exception as cache_err:
@@ -161,6 +150,64 @@ def create_flask_app():
 
         except Exception as e:
             logger.exception("Unhandled error in /analyze: %s", e)
+            return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+    # ───────────────── Save user profile endpoint ─────────────────
+    @app.route("/save-user-profile", methods=["POST"])
+    def save_user_profile():
+        """
+        POST /save-user-profile
+        Stores the extension user's own LinkedIn profile for compatibility scoring.
+        """
+        try:
+            data = request.get_json(silent=True)
+            if data is None:
+                return jsonify({"error": "Invalid or missing JSON body."}), 400
+
+            user_id = data.get("user_id", "").strip()
+            if not user_id:
+                return jsonify({"error": "user_id is required."}), 400
+
+            # Validate user's profile data
+            profile_data, err = validate_profile_data(data.get("profile_data"))
+            if err:
+                return jsonify({"error": f"profile_data validation failed: {err}"}), 400
+
+            # Upsert: update if exists, create if not
+            existing = UserProfile.query.filter_by(user_id=user_id).first()
+            if existing:
+                existing.name = profile_data["name"]
+                existing.headline = profile_data["headline"]
+                existing.about = profile_data["about"]
+                existing.experience = json.dumps(profile_data["experience"])
+                existing.skills = json.dumps(profile_data["skills"])
+                existing.education = json.dumps(profile_data["education"])
+                existing.certifications = json.dumps(profile_data["certifications"])
+                logger.info("Updated user profile for %s (%s)", profile_data["name"], user_id)
+            else:
+                new_profile = UserProfile(
+                    user_id=user_id,
+                    name=profile_data["name"],
+                    headline=profile_data["headline"],
+                    about=profile_data["about"],
+                    experience=json.dumps(profile_data["experience"]),
+                    skills=json.dumps(profile_data["skills"]),
+                    education=json.dumps(profile_data["education"]),
+                    certifications=json.dumps(profile_data["certifications"]),
+                )
+                db.session.add(new_profile)
+                logger.info("Created user profile for %s (%s)", profile_data["name"], user_id)
+
+            db.session.commit()
+
+            # Invalidate cached analyses for this user (compatibility scores may change)
+            invalidate_user_cache(user_id)
+
+            return jsonify({"status": "ok", "message": "Profile saved successfully."}), 200
+
+        except Exception as e:
+            db.session.rollback()
+            logger.exception("Error saving user profile: %s", e)
             return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
     return app

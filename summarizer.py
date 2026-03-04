@@ -19,7 +19,7 @@ class ProfileAnalyzer:
         if not os.getenv("GEMINI_API_KEY"):
             raise ValueError("Gemini API key is required. Please set GEMINI_API_KEY in your .env file.")
         self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-        self.model = 'gemini-2.5-flash'
+        self.model = 'gemini-2.0-flash'
         self.temperature = temperature
         logger.info("\n\nProfessional Gemini client initialized\n")
 
