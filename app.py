@@ -8,7 +8,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os, logging
 from summarizer import analyze_profile
-from config import FLASK_ENV, FLASK_DEBUG
+from config import FLASK_ENV, FLASK_DEBUG, SQLALCHEMY_DATABASE_URI, SQLALCHEMY_TRACK_MODIFICATIONS
+from models import db
 from dotenv import load_dotenv
 
 # ──────────────────────── Logging ────────────────────────
@@ -53,6 +54,14 @@ def create_flask_app():
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key")
     app.config["FLASK_ENV"] = FLASK_ENV
+    app.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = SQLALCHEMY_TRACK_MODIFICATIONS
+
+    # ── Initialize extensions ──
+    db.init_app(app)
+
+    with app.app_context():
+        db.create_all()
 
     # Allow requests from the Chrome Extension (and localhost for dev)
     CORS(app, resources={r"/analyze": {"origins": "*"}})
