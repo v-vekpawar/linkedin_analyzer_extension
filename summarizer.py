@@ -39,43 +39,9 @@ class ProfileAnalyzer:
                     "temperature": gen_config["temperature"],
                     "top_p": gen_config["top_p"],
                     "top_k": gen_config["top_k"],
-                    # "max_output_tokens": gen_config["max_output_tokens"]
                 }
             )
-            try:
-                if hasattr(response, 'candidates') and response.candidates:
-                    text = response.candidates[0].content.parts[0].text.strip()
-                elif hasattr(response, 'text'):
-                    text = response.text.strip()
-                else:
-                    text = str(response)
-            except (AttributeError, IndexError) as e:
-                logger.exception(f"Error extracting text: {e}")
-                text = str(response)
-            
-            # Extract JSON block if it has markdown formatting
-            text = text.strip()
-            if text.startswith('```json'):
-                text = text[7:]
-            elif text.startswith('```'):
-                text = text[3:]
-            
-            if text.endswith('```'):
-                text = text[:-3]
-                
-            text = text.strip()
-            
-            # Just to be extremely safe, find the JSON braces
-            start_idx = text.find('{')
-            end_idx = text.rfind('}')
-            if start_idx != -1 and end_idx != -1 and end_idx >= start_idx:
-                text = text[start_idx:end_idx+1]
-                
-            try:
-                parsed_json = json.loads(text)
-            except json.JSONDecodeError:
-                logger.warning("Failed to parse JSON. Falling back to raw text dict wrapper.")
-                parsed_json = {"raw_text": text}
+            parsed_json = self._extract_json(response)
 
             result = {
                 "result": parsed_json,
@@ -96,6 +62,59 @@ class ProfileAnalyzer:
                 "mode": mode,
                 "profile_name": profile_data.get("name", "Unknown"),
                 "error": True
+            }
+
+    def analyze_all(self, profile_data, user_data=None):
+        """
+        Run a SINGLE Gemini call that returns all 3 analysis modes:
+        about_profile, approach_person, and (optionally) compatibility_score.
+        """
+        if not isinstance(profile_data, dict):
+            raise ValueError("profile_data must be a dict")
+
+        prompt = self._unified_prompt(profile_data, user_data)
+
+        # Balanced generation config for unified output
+        gen_config = {
+            "temperature": 0.4,
+            "top_p": 0.85,
+            "top_k": 40,
+        }
+
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=gen_config,
+            )
+            parsed_json = self._extract_json(response)
+
+            # Validate the expected top-level keys
+            about = parsed_json.get("about_profile", {})
+            approach = parsed_json.get("approach_person", {})
+            compat = parsed_json.get("compatibility_score", None)
+
+            result = {
+                "about_profile": about,
+                "approach_person": approach,
+                "compatibility_score": compat,
+                "profile_name": profile_data.get("name", "Unknown"),
+                "model": self.model,
+                "generated_at": datetime.now().strftime("%m/%d/%Y, %I:%M:%S %p"),
+                "cached": False,
+            }
+
+            logger.info("Unified analysis generated successfully for %s", profile_data.get("name", "Unknown"))
+            return result
+
+        except Exception as e:
+            logger.exception(f"Error in unified analysis: {e}")
+            return {
+                "about_profile": {},
+                "approach_person": {},
+                "compatibility_score": None,
+                "profile_name": profile_data.get("name", "Unknown"),
+                "error": True,
             }
     
     def _get_generation_config(self, mode):
@@ -308,6 +327,146 @@ Example JSON Output:
 Now generate the compatibility score, reasoning, and recommendation for User 1 and User 2 as a strict JSON object using the profile data provided.
 
 """
+
+    # ════════════════════════════════════════════════════════════════
+    #  UNIFIED PROMPT (Phase 3)
+    # ════════════════════════════════════════════════════════════════
+
+    def _unified_prompt(self, profile_data, user_data=None):
+        """Build a single prompt that returns about_profile + approach_person + compatibility_score."""
+
+        profile_block = f"""Target Profile:
+Name: {profile_data["name"]}
+Headline: {profile_data["headline"]}
+About: {profile_data["about"]}
+Experience: {profile_data["experience"]}
+Skills: {profile_data["skills"]}
+Education: {profile_data["education"]}
+Certifications: {profile_data["certifications"]}"""
+
+        user_block = ""
+        compat_schema = ""
+        compat_instruction = ""
+        if user_data:
+            user_block = f"""\n\nYour Profile (the person requesting the analysis):
+Name: {user_data["name"]}
+Headline: {user_data["headline"]}
+About: {user_data["about"]}
+Experience: {user_data["experience"]}
+Skills: {user_data["skills"]}
+Education: {user_data["education"]}
+Certifications: {user_data["certifications"]}"""
+
+            compat_schema = """,
+  "compatibility_score": {{
+    "compatibility_score": "integer (0 to 100)",
+    "why": ["array of 3-5 bullet point strings"],
+    "recommendation": "string (Yes/No and reason)"
+  }}"""
+
+            compat_instruction = """\n\n3. **compatibility_score**: Compare the Target Profile with Your Profile.
+   - Evaluate: industry overlap, skill overlap, career stage, education similarity, complementary skills.
+   - Return an integer score 0-100, reasoning array, and a recommendation."""
+        else:
+            compat_schema = """,
+  "compatibility_score": null"""
+
+        return f"""You are an expert career analyst, professional networking strategist, and LinkedIn outreach coach.
+
+You will perform THREE analyses on the provided LinkedIn profile data and return ALL results in a single JSON object.
+
+{profile_block}{user_block}
+
+═══════════════════════════════════════
+TASKS
+═══════════════════════════════════════
+
+1. **about_profile**: Generate a 30-second intelligence brief.
+   - Summarize the person's professional identity, specialization, seniority, key strengths, career trajectory, and notable talking points.
+
+2. **approach_person**: Generate personalized outreach strategies.
+   - Provide 3-5 outreach angles with explanations.
+   - Generate LinkedIn messages (60-120 words each) for applicable categories: casual_connect, value_first_connect, recruiting_outreach, sales_outreach, mentorship_ask, collaboration_proposal. Use empty string for non-applicable ones.{compat_instruction}
+
+═══════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════
+
+You MUST output strictly as a single JSON object with NO markdown wrappers, NO preamble, and NO trailing text.
+
+Required schema:
+{{
+  "about_profile": {{
+    "who_they_are": "string",
+    "what_they_specialize_in": "string",
+    "seniority_level": "string (junior, mid, senior, executive)",
+    "key_strengths": ["array of 3-5 strings"],
+    "career_trajectory": "string",
+    "potential_talking_points": "string"
+  }},
+  "approach_person": {{
+    "outreach_angles": [
+      {{
+        "angle_type": "string",
+        "explanation": "string"
+      }}
+    ],
+    "personalized_messages": {{
+      "casual_connect": "string or empty",
+      "value_first_connect": "string or empty",
+      "recruiting_outreach": "string or empty",
+      "sales_outreach": "string or empty",
+      "mentorship_ask": "string or empty",
+      "collaboration_proposal": "string or empty"
+    }}
+  }}{compat_schema}
+}}
+
+Tone: professional, approachable, and contextually relevant.
+If any profile field is missing or empty, handle it gracefully (empty string or array).
+
+Now generate ALL analyses as a single strict JSON object.
+"""
+
+    # ════════════════════════════════════════════════════════════════
+    #  JSON EXTRACTION HELPER
+    # ════════════════════════════════════════════════════════════════
+
+    def _extract_json(self, response):
+        """Extract and parse a JSON object from a Gemini response."""
+        try:
+            if hasattr(response, 'candidates') and response.candidates:
+                text = response.candidates[0].content.parts[0].text.strip()
+            elif hasattr(response, 'text'):
+                text = response.text.strip()
+            else:
+                text = str(response)
+        except (AttributeError, IndexError) as e:
+            logger.exception(f"Error extracting text: {e}")
+            text = str(response)
+
+        # Strip markdown code fences
+        text = text.strip()
+        if text.startswith('```json'):
+            text = text[7:]
+        elif text.startswith('```'):
+            text = text[3:]
+        if text.endswith('```'):
+            text = text[:-3]
+        text = text.strip()
+
+        # Find outermost JSON braces
+        start_idx = text.find('{')
+        end_idx = text.rfind('}')
+        if start_idx != -1 and end_idx != -1 and end_idx >= start_idx:
+            text = text[start_idx:end_idx + 1]
+
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse JSON. Falling back to raw text dict wrapper.")
+            return {"raw_text": text}
+
     def _clean_output(self, text):
         preamble_patterns = [
             r'^Here\'s a [^.!?]*[.!?]\s*',
@@ -346,6 +505,12 @@ Now generate the compatibility score, reasoning, and recommendation for User 1 a
         return text.strip()
     
 def analyze_profile(profile_data, mode="about_profile", temperature=None, **kwargs):
-    """Main analysis function"""
+    """Legacy single-mode analysis function (backward compat)."""
     analyzer = ProfileAnalyzer(temperature=temperature or 0.4)
     return analyzer.analyze(profile_data, mode, **kwargs)
+
+
+def analyze_profile_unified(profile_data, user_data=None, temperature=None):
+    """Unified analysis function — single LLM call returning all 3 modes."""
+    analyzer = ProfileAnalyzer(temperature=temperature or 0.4)
+    return analyzer.analyze_all(profile_data, user_data=user_data)
