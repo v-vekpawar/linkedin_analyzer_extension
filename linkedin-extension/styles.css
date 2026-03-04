@@ -2,64 +2,72 @@
  * LinkedIn Profile Analyzer — Chrome Extension Styles
  * ====================================================
  * All selectors are prefixed with "lia-" to avoid collisions with LinkedIn's CSS.
+ * Color palette: #30364F, #ACBAC4, #E1D9BC, #F0F0DB
  */
 
 /* ══════════════════════════════════════════════════
    CSS CUSTOM PROPERTIES
    ══════════════════════════════════════════════════ */
 :root {
-  --lia-primary:     #0A66C2;
-  --lia-primary-dk:  #004182;
-  --lia-accent:      #057642;
-  --lia-bg:          #ffffff;
-  --lia-bg-muted:    #f4f6f8;
-  --lia-text:        #1d2226;
-  --lia-text-muted:  #666666;
-  --lia-border:      #e8e8e8;
-  --lia-shadow:      0 8px 32px rgba(0, 0, 0, 0.18);
-  --lia-radius:      12px;
-  --lia-radius-sm:   8px;
-  --lia-sidebar-w:   380px;
-  --lia-ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --lia-primary: #414348;
+  --lia-primary-dk: #333539;
+  --lia-accent: #9a9b9e;
+  --lia-warm: #f8f4ea;
+  --lia-bg: #f8f4ea;
+  --lia-bg-muted: #efe9da;
+  --lia-text: #414348;
+  --lia-text-muted: #6b6d72;
+  --lia-border: #d6d0c4;
+  --lia-shadow: 0 8px 32px rgba(65, 67, 72, 0.25);
+  --lia-radius: 12px;
+  --lia-radius-sm: 8px;
+  --lia-sidebar-w: 390px;
+  --lia-ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ══════════════════════════════════════════════════
-   FLOATING ACTION BUTTON (FAB)
+   FLOATING ACTION BUTTON (Logo trigger — mid-right)
    ══════════════════════════════════════════════════ */
 #lia-fab {
   position: fixed;
-  bottom: 28px;
-  right: 28px;
+  top: 50%;
+  right: 0;
   z-index: 999998;
+  transform: translateY(-50%);
 
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 22px;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
   border: none;
-  border-radius: 50px;
-  background: linear-gradient(135deg, var(--lia-primary), var(--lia-primary-dk));
-  color: #fff;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
+  border-radius: 14px 0 0 14px;
+  background: var(--lia-primary);
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(10, 102, 194, 0.45);
+  box-shadow: -3px 0 18px rgba(65, 67, 72, 0.35);
   transition: all 0.3s var(--lia-ease);
   user-select: none;
+  overflow: hidden;
 }
 
 #lia-fab:hover {
-  transform: translateY(-2px) scale(1.03);
-  box-shadow: 0 8px 28px rgba(10, 102, 194, 0.55);
+  width: 60px;
+  box-shadow: -5px 0 24px rgba(65, 67, 72, 0.50);
+  background: var(--lia-primary-dk);
 }
 
 #lia-fab:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(-50%) scale(0.95);
 }
 
-#lia-fab svg { flex-shrink: 0; }
+#lia-fab img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  pointer-events: none;
+  filter: brightness(1.1);
+}
 
 /* ══════════════════════════════════════════════════
    OVERLAY
@@ -70,12 +78,12 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(65, 67, 72, 0.40);
   z-index: 999998;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.35s var(--lia-ease);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(3px);
 }
 
 #lia-overlay.lia-overlay-visible {
@@ -110,14 +118,35 @@
   transform: translateX(0);
 }
 
+/* ── Banner ── */
+.lia-banner {
+  width: 100%;
+  max-height: 120px;
+  flex-shrink: 0;
+  background: var(--lia-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  overflow: hidden;
+  border-bottom: 1px solid #f8f4ea;
+}
+
+.lia-banner img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
+}
+
 /* ── Header ── */
 .lia-sidebar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--lia-border);
-  background: var(--lia-bg);
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(214, 208, 196, 0.3);
+  background: var(--lia-primary);
   flex-shrink: 0;
 }
 
@@ -127,17 +156,24 @@
   gap: 10px;
 }
 
+.lia-header-left img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  filter: brightness(1.1);
+}
+
 .lia-header-title {
   font-size: 16px;
   font-weight: 700;
-  color: var(--lia-text);
+  color: #f8f4ea;
 }
 
 .lia-close-btn {
   background: none;
   border: none;
   font-size: 26px;
-  color: var(--lia-text-muted);
+  color: #9a9b9e;
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
@@ -146,8 +182,8 @@
 }
 
 .lia-close-btn:hover {
-  background: var(--lia-bg-muted);
-  color: var(--lia-text);
+  background: rgba(248, 244, 234, 0.1);
+  color: #F0F0DB;
 }
 
 /* ── Profile Mini Card ── */
@@ -165,8 +201,8 @@
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--lia-primary), var(--lia-primary-dk));
-  color: #fff;
+  background: var(--lia-primary);
+  color: #F0F0DB;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -189,6 +225,7 @@
   margin-top: 2px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -243,7 +280,7 @@
 }
 
 .lia-sidebar-body::-webkit-scrollbar-thumb {
-  background: #ccc;
+  background: var(--lia-accent);
   border-radius: 10px;
 }
 
@@ -258,13 +295,20 @@
 }
 
 @keyframes lia-fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ── Cards ── */
 .lia-card {
-  background: var(--lia-bg);
+  background: #ffffff;
   border: 1px solid var(--lia-border);
   border-radius: var(--lia-radius-sm);
   padding: 16px;
@@ -288,8 +332,8 @@
 }
 
 .lia-highlight-card {
-  background: linear-gradient(135deg, #fffbec, #fef3cd);
-  border-color: #f0d060;
+  background: linear-gradient(135deg, var(--lia-bg-muted), #e4dccb);
+  border-color: #c9c2b3;
 }
 
 /* ── Badge ── */
@@ -297,8 +341,8 @@
   display: inline-block;
   padding: 4px 14px;
   border-radius: 50px;
-  background: linear-gradient(135deg, #e8f4fd, #d1ecf9);
-  color: var(--lia-primary);
+  background: var(--lia-primary);
+  color: #f8f4ea;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -317,7 +361,7 @@
   display: inline-flex;
   padding: 5px 12px;
   border-radius: 50px;
-  background: var(--lia-bg-muted);
+  background: var(--lia-bg);
   color: var(--lia-text);
   font-size: 12px;
   font-weight: 500;
@@ -326,9 +370,9 @@
 }
 
 .lia-chip:hover {
-  background: #e8f4fd;
+  background: var(--lia-primary);
   border-color: var(--lia-primary);
-  color: var(--lia-primary);
+  color: #f8f4ea;
 }
 
 /* ── Outreach Angles ── */
@@ -337,7 +381,9 @@
   border-bottom: 1px solid var(--lia-border);
 }
 
-.lia-angle:last-child { border-bottom: none; }
+.lia-angle:last-child {
+  border-bottom: none;
+}
 
 .lia-angle strong {
   font-size: 13px;
@@ -367,10 +413,11 @@
 
 .lia-msg-body {
   position: relative;
-  background: var(--lia-bg-muted);
+  background: #F7F5EA;
   border-radius: var(--lia-radius-sm);
   padding: 14px;
   padding-right: 40px;
+  border: 1px solid var(--lia-border);
 }
 
 .lia-msg-body p {
@@ -397,9 +444,9 @@
 }
 
 .lia-copy-btn:hover {
-  background: var(--lia-bg);
+  background: var(--lia-primary);
   border-color: var(--lia-primary);
-  color: var(--lia-primary);
+  color: #F0F0DB;
 }
 
 /* ══════════════════════════════════════════════════
@@ -437,7 +484,9 @@
 }
 
 @keyframes lia-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ══════════════════════════════════════════════════
@@ -465,7 +514,7 @@
   border: none;
   border-radius: 50px;
   background: var(--lia-primary);
-  color: #fff;
+  color: #F0F0DB;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -484,11 +533,14 @@
   #lia-sidebar {
     width: 100vw;
   }
-  #lia-fab span {
-    display: none;
-  }
+
   #lia-fab {
-    padding: 14px;
-    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+  }
+
+  #lia-fab img {
+    width: 28px;
+    height: 28px;
   }
 }
