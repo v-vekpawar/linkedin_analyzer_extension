@@ -4,7 +4,8 @@
     "version": "1.0.0",
     "description": "Analyze any LinkedIn profile with AI — get summaries, outreach strategies, and compatibility scores.",
     "permissions": [
-        "activeTab"
+        "activeTab",
+        "storage"
     ],
     "host_permissions": [
         "https://www.linkedin.com/*",

@@ -336,6 +336,65 @@
   border-color: #c9c2b3;
 }
 
+/* ── Compatibility Score Card ── */
+.lia-compat-card {
+  background: linear-gradient(135deg, #f0ede4, var(--lia-bg-muted));
+  border-color: #c9c2b3;
+  text-align: center;
+}
+
+.lia-compat-gauge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 12px 0;
+}
+
+.lia-compat-score {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--lia-primary);
+  color: #f8f4ea;
+  font-size: 24px;
+  font-weight: 800;
+  box-shadow: 0 4px 16px rgba(65, 67, 72, 0.25);
+}
+
+.lia-compat-rec {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--lia-text);
+  margin: 10px 0 6px;
+  text-align: left;
+}
+
+.lia-compat-reasons {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  text-align: left;
+}
+
+.lia-compat-reasons li {
+  font-size: 12px;
+  color: var(--lia-text-muted);
+  line-height: 1.5;
+  padding: 4px 0 4px 16px;
+  position: relative;
+}
+
+.lia-compat-reasons li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--lia-primary);
+  font-weight: 700;
+}
+
 /* ── Badge ── */
 .lia-badge {
   display: inline-block;
@@ -416,7 +475,7 @@
   background: #F7F5EA;
   border-radius: var(--lia-radius-sm);
   padding: 14px;
-  padding-right: 40px;
+  padding-right: 14px;
   border: 1px solid var(--lia-border);
 }
 
@@ -427,10 +486,15 @@
   margin: 0;
 }
 
-.lia-copy-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
+.lia-msg-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.lia-copy-btn,
+.lia-send-btn {
   background: none;
   border: 1px solid var(--lia-border);
   border-radius: 6px;
@@ -441,9 +505,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 11px;
+  gap: 4px;
 }
 
-.lia-copy-btn:hover {
+.lia-copy-btn:hover,
+.lia-send-btn:hover {
   background: var(--lia-primary);
   border-color: var(--lia-primary);
   color: #F0F0DB;

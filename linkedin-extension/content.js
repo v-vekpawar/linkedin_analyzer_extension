@@ -18,6 +18,7 @@
   //  CONFIGURATION
   // ════════════════════════════════════════════════════════════════
   const BACKEND_URL = "http://localhost:5000/analyze";
+  const SAVE_PROFILE_URL = "http://localhost:5000/save-user-profile";
   const UI_PREFIX = "lia";   // prefix for all injected element IDs
 
   // ════════════════════════════════════════════════════════════════
@@ -25,6 +26,7 @@
   // ════════════════════════════════════════════════════════════════
   let isUIInjected = false;
   let lastProfileUrl = "";
+  let userId = null;
 
   /**
    * Check if the extension context is still valid.
@@ -263,6 +265,7 @@
 
     // Extract data first
     const profileData = extractProfileData();
+    const profileUrl = window.location.href.split("?")[0]; // clean URL without query params
 
     if (!profileData.name || profileData.name === "Unknown") {
       showError("Could not extract profile data. Make sure you're on a LinkedIn profile page and the page has fully loaded.");
@@ -273,27 +276,28 @@
     showSidebar(profileData, null, true);
 
     try {
-      // Run all three analysis modes in parallel
-      const modes = ["about_profile", "approach_person"];
-      const requests = modes.map(mode =>
-        fetch(BACKEND_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            analysis_mode: mode,
-            profile_data: profileData,
-          }),
-        }).then(res => {
-          if (!res.ok) throw new Error(`Server error (${res.status})`);
-          return res.json();
-        })
-      );
+      // Ensure we have a user ID for compatibility scoring
+      await ensureUserId();
 
-      const [aboutResult, approachResult] = await Promise.all(requests);
+      // Single unified API call — returns about_profile + approach_person + compatibility_score
+      const response = await fetch(BACKEND_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profile_data: profileData,
+          profile_url: profileUrl,
+          user_id: userId || "",
+        }),
+      });
+
+      if (!response.ok) throw new Error(`Server error (${response.status})`);
+      const result = await response.json();
 
       showSidebar(profileData, {
-        about: aboutResult.result || {},
-        approach: approachResult.result || {},
+        about: result.about_profile || {},
+        approach: result.approach_person || {},
+        compatibility: result.compatibility_score || null,
+        cached: result.cached || false,
       }, false);
 
     } catch (err) {
@@ -407,6 +411,7 @@
   function buildResultsHTML(profile, results) {
     const about = results.about || {};
     const approach = results.approach || {};
+    const compatibility = results.compatibility || null;
     const bannerUrl = chrome.runtime.getURL("icons/banner.png");
     const logoUrl = chrome.runtime.getURL("icons/logo.png");
 
@@ -433,14 +438,27 @@
 
       <!-- Tabs -->
       <div class="${UI_PREFIX}-tabs">
-        <button class="${UI_PREFIX}-tab-btn active" data-tab="summary">Summary</button>
+        <button class="${UI_PREFIX}-tab-btn active" data-tab="analysis">Analysis</button>
         <button class="${UI_PREFIX}-tab-btn" data-tab="approach">Approach</button>
       </div>
 
       <div class="${UI_PREFIX}-sidebar-body">
 
-        <!-- ── Tab: Summary ── -->
-        <div id="${UI_PREFIX}-panel-summary" class="${UI_PREFIX}-tab-panel active">
+        <!-- ── Tab: Analysis ── -->
+        <div id="${UI_PREFIX}-panel-analysis" class="${UI_PREFIX}-tab-panel active">
+
+          ${compatibility ? `
+            <div class="${UI_PREFIX}-card ${UI_PREFIX}-compat-card">
+              <h4>🎯 Compatibility Score</h4>
+              <div class="${UI_PREFIX}-compat-gauge">
+                <div class="${UI_PREFIX}-compat-score">${typeof compatibility.compatibility_score === 'number' ? compatibility.compatibility_score : '—'}%</div>
+              </div>
+              ${compatibility.recommendation ? `<p class="${UI_PREFIX}-compat-rec">${escapeHTML(compatibility.recommendation)}</p>` : ''}
+              ${compatibility.why && compatibility.why.length ? `
+                <ul class="${UI_PREFIX}-compat-reasons">
+                  ${compatibility.why.map(r => `<li>${escapeHTML(r)}</li>`).join('')}
+                </ul>` : ''}
+            </div>` : ''}
           ${about.seniority_level ? `<span class="${UI_PREFIX}-badge">${escapeHTML(about.seniority_level)} Level</span>` : ""}
 
           ${about.who_they_are ? `
@@ -499,11 +517,18 @@
                     <div class="${UI_PREFIX}-msg-label">${escapeHTML(k.replace(/_/g, " "))}</div>
                     <div class="${UI_PREFIX}-msg-body">
                       <p>${escapeHTML(v)}</p>
-                      <button class="${UI_PREFIX}-copy-btn" data-text="${escapeAttr(v)}" title="Copy message">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                      </button>
+                      <div class="${UI_PREFIX}-msg-actions">
+                        <button class="${UI_PREFIX}-copy-btn" data-text="${escapeAttr(v)}" title="Copy message">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                               stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                        <button class="${UI_PREFIX}-send-btn" data-text="${escapeAttr(v)}" title="Copy & open messaging">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 `).join("")}
@@ -587,7 +612,108 @@
         }, 1500);
       });
     }
+
+    // Send button: copy + open LinkedIn messaging
+    const sendBtn = e.target.closest(`.${UI_PREFIX}-send-btn`);
+    if (sendBtn) {
+      const text = sendBtn.getAttribute("data-text")
+        .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+        .replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+      navigator.clipboard.writeText(text).then(() => {
+        sendBtn.innerHTML = "✓ Copied";
+        setTimeout(() => {
+          sendBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
+        }, 2000);
+
+        // Try to click LinkedIn's "Message" button on the profile
+        const msgBtn = document.querySelector('button[aria-label*="Message"]') ||
+          document.querySelector('a[href*="messaging"]');
+        if (msgBtn) msgBtn.click();
+      });
+    }
   });
+
+  // ════════════════════════════════════════════════════════════════
+  //  USER PROFILE SYNC
+  // ════════════════════════════════════════════════════════════════
+
+  /** Generate a UUID v4 using crypto API */
+  function generateUUID() {
+    return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
+      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
+  }
+
+  /** Load or create a persistent user ID in chrome.storage.local */
+  async function ensureUserId() {
+    if (userId) return userId;
+    if (!isExtensionValid()) return null;
+
+    try {
+      const data = await chrome.storage.local.get("lia_user_id");
+      if (data.lia_user_id) {
+        userId = data.lia_user_id;
+      } else {
+        userId = generateUUID();
+        await chrome.storage.local.set({ lia_user_id: userId });
+        console.log("[LinkedIn Analyzer] Generated new user ID:", userId);
+      }
+      return userId;
+    } catch (e) {
+      console.warn("[LinkedIn Analyzer] Storage access failed:", e);
+      return null;
+    }
+  }
+
+  /**
+   * Detect if the user is on their OWN LinkedIn profile and sync it.
+   * LinkedIn adds specific indicators when viewing your own profile.
+   */
+  async function syncUserProfile() {
+    if (!isExtensionValid() || !isProfilePage(window.location.href)) return;
+
+    // LinkedIn shows "Add profile section" or edit buttons only on your own profile
+    const isOwnProfile =
+      document.querySelector("button[aria-label='Open to']") !== null ||
+      document.querySelector("button[aria-label='Add profile section']") !== null ||
+      document.querySelector(".pv-top-card--edit-name-pencil") !== null ||
+      document.querySelector("div.pv-profile-card button.profile-edit-btn") !== null;
+
+    if (!isOwnProfile) return;
+
+    const uid = await ensureUserId();
+    if (!uid) return;
+
+    // Check if we already synced recently (within the last hour)
+    try {
+      const stored = await chrome.storage.local.get("lia_last_sync");
+      const lastSync = stored.lia_last_sync || 0;
+      if (Date.now() - lastSync < 3600000) return; // 1 hour cooldown
+    } catch { /* continue */ }
+
+    const profileData = extractProfileData();
+    if (!profileData.name || profileData.name === "Unknown") return;
+
+    try {
+      const response = await fetch(SAVE_PROFILE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: uid,
+          profile_data: profileData,
+        }),
+      });
+
+      if (response.ok) {
+        await chrome.storage.local.set({ lia_last_sync: Date.now() });
+        console.log("[LinkedIn Analyzer] Synced your profile for compatibility scoring.");
+      }
+    } catch (e) {
+      console.warn("[LinkedIn Analyzer] Profile sync failed (non-fatal):", e);
+    }
+  }
 
   // ════════════════════════════════════════════════════════════════
   //  BOOTSTRAP
@@ -598,6 +724,8 @@
     lastProfileUrl = window.location.href;
     // Wait for the page to settle before injecting
     setTimeout(onProfilePageLoad, 1500);
+    // Attempt to sync user profile if they're on their own page
+    setTimeout(syncUserProfile, 3000);
   }
 
   // Start watching for SPA navigations
