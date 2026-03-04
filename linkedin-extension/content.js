@@ -667,19 +667,105 @@
     }
   }
 
+  /** Check if we're on the LinkedIn feed page */
+  function isFeedPage() {
+    return /linkedin\.com\/feed/.test(window.location.href);
+  }
+
   /**
-   * Detect if the user is on their OWN LinkedIn profile and sync it.
-   * LinkedIn adds specific indicators when viewing your own profile.
+   * Feed page onboarding — shows a visible banner on linkedin.com/feed
+   * asking the user to visit their own profile for compatibility scoring setup.
+   */
+  async function handleFeedPageOnboarding() {
+    if (!isExtensionValid() || !isFeedPage()) return;
+
+    // Check if already synced
+    try {
+      const stored = await chrome.storage.local.get("lia_user_synced");
+      if (stored.lia_user_synced) {
+        console.log("[LinkedIn Analyzer] Profile already synced, skipping onboarding.");
+        return;
+      }
+    } catch { /* continue */ }
+
+    // Try to find the user's profile URL from the feed page
+    const findProfileUrl = () => {
+      // Grab ALL anchor tags that point to /in/ — the first one on the feed
+      // sidebar is usually the user's own profile
+      const allLinks = document.querySelectorAll('a[href*="/in/"]');
+      for (const link of allLinks) {
+        const href = link.getAttribute("href") || "";
+        // Match clean /in/username patterns (no query strings, no hashes in the slug)
+        if (/\/in\/[a-zA-Z0-9_-]{3,100}\/?$/.test(href)) {
+          return href.startsWith("http") ? href : `https://www.linkedin.com${href}`;
+        }
+      }
+      return null;
+    };
+
+    // Show the onboarding toast after page settles
+    const showOnboardingToast = () => {
+      // Don't show twice
+      if (document.getElementById(`${UI_PREFIX}-onboarding-toast`)) return;
+
+      const profileUrl = findProfileUrl();
+      const logoUrl = chrome.runtime.getURL("icons/logo.png");
+
+      const toast = document.createElement("div");
+      toast.id = `${UI_PREFIX}-onboarding-toast`;
+      toast.innerHTML = `
+        <div class="${UI_PREFIX}-toast-inner">
+          <img src="${logoUrl}" alt="Logo" class="${UI_PREFIX}-toast-logo" />
+          <div class="${UI_PREFIX}-toast-content">
+            <strong>LinkedIn Profile Analyzer</strong>
+            <p>Visit your profile to enable <b>compatibility scoring</b> when analyzing others.</p>
+          </div>
+          <div class="${UI_PREFIX}-toast-actions">
+            ${profileUrl
+          ? `<a href="${profileUrl}" class="${UI_PREFIX}-toast-btn ${UI_PREFIX}-toast-btn-primary">Go to My Profile</a>`
+          : `<a href="https://www.linkedin.com/me/" class="${UI_PREFIX}-toast-btn ${UI_PREFIX}-toast-btn-primary">Go to My Profile</a>`
+        }
+            <button class="${UI_PREFIX}-toast-btn ${UI_PREFIX}-toast-dismiss">Later</button>
+          </div>
+        </div>
+      `;
+
+
+      document.body.appendChild(toast);
+
+      // Animate in
+      requestAnimationFrame(() => toast.classList.add(`${UI_PREFIX}-toast-visible`));
+
+      // Wire dismiss
+      toast.querySelector(`.${UI_PREFIX}-toast-dismiss`).addEventListener("click", () => {
+        toast.classList.remove(`${UI_PREFIX}-toast-visible`);
+        setTimeout(() => toast.remove(), 350);
+      });
+    };
+
+    // Wait for the feed page to load
+    setTimeout(showOnboardingToast, 3000);
+  }
+
+  /**
+   * Sync user profile when on their OWN LinkedIn profile page.
+   * LinkedIn adds specific edit/action buttons only on your own profile.
    */
   async function syncUserProfile() {
     if (!isExtensionValid() || !isProfilePage(window.location.href)) return;
 
-    // LinkedIn shows "Add profile section" or edit buttons only on your own profile
+    // Multiple signals that indicate this is the user's own profile
     const isOwnProfile =
       document.querySelector("button[aria-label='Open to']") !== null ||
       document.querySelector("button[aria-label='Add profile section']") !== null ||
       document.querySelector(".pv-top-card--edit-name-pencil") !== null ||
-      document.querySelector("div.pv-profile-card button.profile-edit-btn") !== null;
+      document.querySelector(".profile-photo-edit__edit-btn") !== null ||
+      document.querySelector("button.profile-photo-edit__camera-icon") !== null ||
+      document.querySelector("#profile-edit-toggle") !== null ||
+      document.querySelector("button[aria-label='Edit intro']") !== null ||
+      document.querySelector("div.ph5 button.artdeco-button--premium") !== null ||
+      // The "Add profile section" dropdown trigger
+      document.querySelector("div.pvs-profile-actions button.artdeco-dropdown__trigger") !== null;
 
     if (!isOwnProfile) return;
 
@@ -707,8 +793,11 @@
       });
 
       if (response.ok) {
-        await chrome.storage.local.set({ lia_last_sync: Date.now() });
-        console.log("[LinkedIn Analyzer] Synced your profile for compatibility scoring.");
+        await chrome.storage.local.set({
+          lia_last_sync: Date.now(),
+          lia_user_synced: true,
+        });
+        console.log("[LinkedIn Analyzer] ✅ Profile synced! Compatibility scoring is now active.");
       }
     } catch (e) {
       console.warn("[LinkedIn Analyzer] Profile sync failed (non-fatal):", e);
@@ -719,12 +808,13 @@
   //  BOOTSTRAP
   // ════════════════════════════════════════════════════════════════
 
-  // Initial check — page might already be a profile
-  if (isProfilePage(window.location.href)) {
+  if (isFeedPage()) {
+    // On the feed page — handle first-time onboarding (redirect to own profile)
+    handleFeedPageOnboarding();
+  } else if (isProfilePage(window.location.href)) {
+    // On a profile page — inject FAB and attempt sync
     lastProfileUrl = window.location.href;
-    // Wait for the page to settle before injecting
     setTimeout(onProfilePageLoad, 1500);
-    // Attempt to sync user profile if they're on their own page
     setTimeout(syncUserProfile, 3000);
   }
 

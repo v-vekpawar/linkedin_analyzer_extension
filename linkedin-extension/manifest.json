@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "LinkedIn Profile Analyzer",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "description": "Analyze any LinkedIn profile with AI — get summaries, outreach strategies, and compatibility scores.",
     "permissions": [
         "activeTab",
@@ -15,7 +15,9 @@
     "content_scripts": [
         {
             "matches": [
-                "https://www.linkedin.com/in/*"
+                "https://www.linkedin.com/in/*",
+                "https://www.linkedin.com/feed*",
+                "https://www.linkedin.com/feed/*"
             ],
             "js": [
                 "content.js"
