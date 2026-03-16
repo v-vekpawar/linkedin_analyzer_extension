@@ -1,0 +1,170 @@
+/**
+ * LinkedIn Profile Analyzer — Content CSS  v3.2
+ * ==============================================
+ * Styles injected into LinkedIn's page.
+ * Covers: FAB trigger button + onboarding toast.
+ */
+
+:root {
+  --lia-primary:    #414348;
+  --lia-primary-dk: #2e3033;
+  --lia-bg:         #f8f4ea;
+  --lia-ease:       cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ══ Floating Action Button ════════════════════════════════════════ */
+#lia-fab {
+  position: fixed;
+  top:   50%;
+  right: 0;
+  z-index: 2147483647;
+  transform: translateY(-50%);
+
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  width:  48px;
+  height: 48px;
+  padding: 0;
+
+  border:        none;
+  border-radius: 12px 0 0 12px;
+  background:    var(--lia-primary);
+  cursor:        pointer;
+  box-shadow:    -3px 0 14px rgba(65, 67, 72, 0.35);
+  transition:    width 0.22s var(--lia-ease),
+                 box-shadow 0.22s var(--lia-ease),
+                 background 0.18s;
+  overflow:    hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+#lia-fab:hover {
+  width:      58px;
+  background: var(--lia-primary-dk);
+  box-shadow: -4px 0 20px rgba(65, 67, 72, 0.50);
+}
+
+#lia-fab:active {
+  transform: translateY(-50%) scale(0.94);
+}
+
+#lia-fab img {
+  width:  30px;
+  height: 30px;
+  object-fit:     contain;
+  pointer-events: none;
+  filter:         brightness(1.15);
+  flex-shrink:    0;
+}
+
+/* ══ Onboarding Toast (Bug 1 fix) ══════════════════════════════════
+   Injected into LinkedIn's DOM by content.js.
+   "Go to My Profile" navigates in the SAME tab via window.location.href.
+═══════════════════════════════════════════════════════════════════ */
+#lia-onboarding-toast {
+  position: fixed;
+  bottom: 28px;
+  left:   50%;
+  transform: translateX(-50%) translateY(20px);
+  opacity: 0;
+  z-index: 2147483646;
+
+  width:      calc(100% - 48px);
+  max-width:  440px;
+  background: var(--lia-primary);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.16);
+  padding: 0;
+  overflow: hidden;
+  pointer-events: none;
+
+  transition: opacity 0.35s var(--lia-ease),
+              transform 0.35s var(--lia-ease);
+
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#lia-onboarding-toast.lia-toast-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+.lia-toast-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+}
+
+.lia-toast-logo {
+  width:  36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: brightness(1.2);
+}
+
+.lia-toast-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.lia-toast-content strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #f8f4ea;
+  margin-bottom: 3px;
+}
+
+.lia-toast-content p {
+  font-size: 12px;
+  color: #b8b9bc;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.lia-toast-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 14px 16px;
+}
+
+.lia-toast-btn {
+  padding: 8px 16px;
+  border-radius: 50px;
+  border: none;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.2px;
+  transition: background 0.18s, color 0.18s, transform 0.15s;
+}
+
+.lia-toast-btn:active {
+  transform: scale(0.96);
+}
+
+.lia-toast-btn-primary {
+  background: var(--lia-bg);
+  color:      var(--lia-primary);
+}
+
+.lia-toast-btn-primary:hover {
+  background: #ffffff;
+}
+
+.lia-toast-dismiss {
+  background: rgba(255, 255, 255, 0.12);
+  color:      #b8b9bc;
+}
+
+.lia-toast-dismiss:hover {
+  background: rgba(255, 255, 255, 0.20);
+  color:      #f8f4ea;
+}
