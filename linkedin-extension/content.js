@@ -1,45 +1,41 @@
-/**
- * LinkedIn Profile Analyzer — Content Script  v3.3
- *
- * Navigation fix: instead of the side panel guessing timing via
- * chrome.tabs.onUpdated (unreliable due to LinkedIn's multiple
- * pushState/replaceState calls per navigation), the content script
- * now patches the History API and uses a MutationObserver to watch
- * for the profile <h1> to actually render. Only then does it signal
- * the side panel — eliminating all race conditions.
- */
+// LinkedIn Profile Analyzer Content Script.
+// Detects LinkedIn profile navigation, extracts profile data intuitively, and syncs user info.
 
 (() => {
   "use strict";
 
+  // Identifiers used for extension UI elements.
+  // URL to save synced data to the backend locally.
   const UI_PREFIX = "lia";
   const SAVE_PROFILE_URL = "http://localhost:5000/save-user-profile";
 
+  // State variables for routing and tracking current sessions.
+  // Helps determine navigation states to watch the DOM effectively.
   let userId = null;
   let lastUrl = "";
   let navDebounce = null;
-  let profileObserver = null; // MutationObserver watching for profile DOM
+  let profileObserver = null; 
 
-  // ── Extension validity ──────────────────────────────────────────
+  // Safely checks if the extension context is still valid.
+  // Prevents invalid runtime errors on disconnected extensions.
   function isExtensionValid() {
     try { return !!chrome.runtime?.id; } catch { return false; }
   }
 
-  // ── URL helpers ─────────────────────────────────────────────────
+  // Verifies if the standard LinkedIn URL corresponds to a user's profile.
   function isProfilePage(url) {
     return /linkedin\.com\/in\/[^/?#]+/.test(url);
   }
+
+  // Parses URLs to remove query arrays and hash fragments.
+  // Helps reliably compare current clean navigation paths.
   function cleanUrl(url) {
     return url.split("?")[0].split("#")[0];
   }
 
-  // ════════════════════════════════════════════════════════════════
-  //  NAVIGATION DETECTION (v4.0 fix)
-  //  Listens to background.js for reliable URL changes, plus
-  //  a polling fallback to ensure we never miss an SPA navigation.
-  // ════════════════════════════════════════════════════════════════
+  // Regularly checks URL changes for LinkedIn SPA router handling.
+  // Provides popstate listeners to safely capture location history events.
   function setupNavigationListener() {
-    // 1. Fallback polling: check URL every 500ms
     setInterval(() => {
       const currentUrl = cleanUrl(window.location.href);
       if (currentUrl !== lastUrl) {
@@ -47,41 +43,40 @@
       }
     }, 500);
 
-    // 3. Keep popstate for native back/forward button clicks
     window.addEventListener("popstate", scheduleNavCheck);
   }
 
+  // Resets tracking debounce counters on navigation events.
+  // Delays validation momentarily to combine overlapping path changes.
   function scheduleNavCheck() {
     clearTimeout(navDebounce);
     navDebounce = setTimeout(handleNavigation, 300);
   }
 
+  // Verifies state context upon URL navigation and emits 'pageChanged'.
+  // Initiates DOM tracking whenever a targeted profile page opens up.
   function handleNavigation() {
     const url = cleanUrl(window.location.href);
     if (url === lastUrl) return;
     lastUrl = url;
 
-    // Stop any existing profile-DOM watcher
     if (profileObserver) { profileObserver.disconnect(); profileObserver = null; }
 
     if (!isExtensionValid()) return;
 
     if (isProfilePage(url)) {
-      // Profile page: wait for the <h1> to actually render before signalling
       waitForProfileDOM(url);
     } else {
-      // Non-profile page: signal immediately — no DOM wait needed
       chrome.runtime.sendMessage({ action: "pageChanged", url, isProfilePage: false }).catch(() => { });
     }
   }
 
+  // Listens dynamically for LinkedIn's lazy <h1> profile injection on SPAs.
+  // Signals the side panel confidently once the primary header exists.
   function waitForProfileDOM(url) {
-    // Delay checking by 800ms to allow LinkedIn's SPA to unmount the previous page (e.g. Feed)
     setTimeout(() => {
-      // Check immediately if DOM is already there
       if (trySignalProfileReady(url)) return;
 
-      // Otherwise watch the DOM
       profileObserver = new MutationObserver(() => {
         if (trySignalProfileReady(url)) {
           profileObserver.disconnect();
@@ -90,7 +85,6 @@
       });
       profileObserver.observe(document.body, { childList: true, subtree: true });
 
-      // Safety timeout: if observer never fires after 8s, signal anyway
       setTimeout(() => {
         if (profileObserver) {
           profileObserver.disconnect();
@@ -102,43 +96,47 @@
     }, 800);
   }
 
+  // Probes DOM trees iteratively trying to locate primary profile names reliably.
+  // Employs a fallback parsing document titles if required.
   function findProfileName(allowTitleFallback = false) {
-    // 1. Target the exact classes where LinkedIn puts the name, regardless of tag
-    // This allows it to work even if React re-renders the name as an <h2> or <div> during SPA navigation
-    const primaryTitle = document.querySelector(".pv-top-card .text-heading-xlarge, .pv-text-details__left-panel .text-heading-xlarge, .pv-top-card h1, h1.text-heading-xlarge");
+    const primaryTitle = document.querySelector(
+      ".pv-top-card .text-heading-xlarge, " +
+      ".pv-text-details__left-panel .text-heading-xlarge, " +
+      ".pv-top-card h1, " +
+      "h1.text-heading-xlarge"
+    );
     if (primaryTitle && primaryTitle.innerText.trim()) return primaryTitle.innerText.trim();
 
-    // 2. Fallback: iterate over all H1s and H2s in the top card
-    for (const el of document.querySelectorAll(".pv-top-card h1, .pv-top-card h2, .pv-text-details__left-panel h1, .pv-text-details__left-panel h2")) {
-      // Skip screen-reader only headings
+    for (const el of document.querySelectorAll(
+      ".pv-top-card h1, .pv-top-card h2, " +
+      ".pv-text-details__left-panel h1, .pv-text-details__left-panel h2"
+    )) {
       if (el.classList.contains("visually-hidden")) continue;
       const text = el.innerText.trim();
       if (text) return text;
     }
 
-    // 3. Bulletproof Fallback: extract from document title (e.g. "First Last | LinkedIn")
     if (allowTitleFallback && document.title && document.title.includes(" | LinkedIn")) {
-       const titleName = document.title.split(" | LinkedIn")[0].replace(/^\(\d+\)\s*/, "").trim();
-       if (titleName && titleName !== "LinkedIn" && titleName !== "Feed") return titleName;
+      const titleName = document.title.split(" | LinkedIn")[0].replace(/^\(\d+\)\s*/, "").trim();
+      if (titleName && titleName !== "LinkedIn" && titleName !== "Feed") return titleName;
     }
 
     return "";
   }
 
+  // Ascertains whether profile <h1> strings exist before sending a relay.
+  // Ensures the analyzer waits accurately without race conditions occurring.
   function trySignalProfileReady(url) {
-    // Crucial: Only rely on DOM elements to signal readiness, NOT the document title.
-    // The title updates instantly on SPA navigation, but the DOM takes time.
     const name = findProfileName(false);
     if (!name) return false;
 
-    if (!isExtensionValid()) return true; // stop observing but don't message
+    if (!isExtensionValid()) return true;
     chrome.runtime.sendMessage({ action: "profileReady", url }).catch(() => { });
     return true;
   }
 
-  // ════════════════════════════════════════════════════════════════
-  //  FAB — on every LinkedIn page
-  // ════════════════════════════════════════════════════════════════
+  // Injects a floating action button safely onto valid LinkedIn pages.
+  // Triggers 'openSidePanel' events enabling analyzers seamlessly for profiles.
   function injectFab() {
     if (!isExtensionValid()) return;
     if (document.getElementById(`${UI_PREFIX}-fab`)) return;
@@ -157,21 +155,18 @@
     document.body.appendChild(fab);
   }
 
+  // Employs MutationObservers continuously protecting injected FABs against hydration rewrites.
   function watchFab() {
     new MutationObserver(() => {
       if (!document.getElementById(`${UI_PREFIX}-fab`)) injectFab();
     }).observe(document.body, { childList: true });
   }
 
-  // ════════════════════════════════════════════════════════════════
-  //  ONBOARDING TOAST  (Bug 1 fix)
-  //  Injected into LinkedIn's DOM — styled by content.css.
-  //  "Go to My Profile" uses window.location.href (same tab).
-  // ════════════════════════════════════════════════════════════════
+  // Generates conditional toasts recommending users inspect their 'Own' profiles properly.
+  // Syncs compatibility scores automatically by promoting self-analyses initially.
   async function maybeShowOnboardingToast() {
     if (!isExtensionValid()) return;
 
-    // Skip if already synced
     try {
       const stored = await chrome.storage.local.get("lia_user_synced");
       if (stored.lia_user_synced) return;
@@ -179,7 +174,6 @@
 
     if (document.getElementById(`${UI_PREFIX}-onboarding-toast`)) return;
 
-    // Find the user's own profile URL from links on the page
     const findOwnProfileUrl = () => {
       for (const link of document.querySelectorAll('a[href*="/in/"]')) {
         const href = (link.getAttribute("href") || "").split("?")[0];
@@ -209,7 +203,6 @@
       </div>`;
 
     document.body.appendChild(toast);
-    // Trigger CSS transition
     requestAnimationFrame(() => {
       requestAnimationFrame(() => toast.classList.add("lia-toast-visible"));
     });
@@ -219,20 +212,16 @@
       setTimeout(() => toast.remove(), 400);
     }
 
-    // "Go to My Profile" — same tab navigation (Bug 1 fix)
     document.getElementById("lia-toast-go").addEventListener("click", () => {
       window.location.href = profileUrl;
     });
 
     document.getElementById("lia-toast-later").addEventListener("click", dismissToast);
 
-    // Auto-dismiss after 14 s
     setTimeout(dismissToast, 14000);
   }
 
-  // ════════════════════════════════════════════════════════════════
-  //  DOM DATA EXTRACTION
-  // ════════════════════════════════════════════════════════════════
+  // Securely derives text payloads directly out of DOM selectors catching errors intuitively.
   function safeText(selector, root = document, fallback = "") {
     try {
       const el = root.querySelector(selector);
@@ -240,6 +229,7 @@
     } catch { return fallback; }
   }
 
+  // Combines extracted node objects collectively to assemble comprehensive profile metadata.
   function extractProfileData() {
     return {
       name: extractName(),
@@ -252,16 +242,18 @@
     };
   }
 
+  // Employs generalized node detection trying to collect reliable profile names.
   function extractName() {
-    // When performing the actual data extraction, it's safe to use the title fallback as a last resort
     return findProfileName(true) || "Unknown";
   }
 
+  // Iterates through common profile selectors aiming to parse primary headline information accurately.
   function extractHeadline() {
     return safeText("div.text-body-medium.break-words") ||
       safeText(".pv-top-card--list .text-body-medium") || "";
   }
 
+  // Retrieves 'About' text dynamically querying explicitly hidden section elements reliably.
   function extractAbout() {
     for (const section of document.querySelectorAll("section")) {
       const header = section.querySelector("div#about, h2 span.visually-hidden");
@@ -276,6 +268,7 @@
     return "";
   }
 
+  // Fetches lists iteratively from experience DOM cards formatting cleanly into descriptive metadata.
   function extractExperience() {
     const items = [];
     for (const section of document.querySelectorAll("section")) {
@@ -293,6 +286,7 @@
     return items.slice(0, 8);
   }
 
+  // Validates explicit skill texts dynamically appending successfully identified arrays together efficiently.
   function extractSkills() {
     const skills = [];
     for (const section of document.querySelectorAll("section")) {
@@ -309,6 +303,7 @@
     return skills.slice(0, 15);
   }
 
+  // Discovers recent educational strings linking standard university properties structurally safely.
   function extractEducation() {
     const items = [];
     for (const section of document.querySelectorAll("section")) {
@@ -328,6 +323,7 @@
     return items.slice(0, 5);
   }
 
+  // Parses linked credential entries organizing certificates comprehensively via text filters intelligently.
   function extractCertifications() {
     const items = [];
     for (const section of document.querySelectorAll("section")) {
@@ -348,9 +344,59 @@
     return items.slice(0, 5);
   }
 
-  // ════════════════════════════════════════════════════════════════
-  //  OWN PROFILE AUTO-SYNC
-  // ════════════════════════════════════════════════════════════════
+  // Verifies parsed objects confirming robust lists populated appropriately bypassing basic name constraints conditionally.
+  function profileDataIsRich(data) {
+    return (
+      data.experience.length > 0 ||
+      data.skills.length > 0 ||
+      data.education.length > 0 ||
+      data.about.length > 20
+    );
+  }
+
+  // Scrolls strategically rendering virtual react arrays guaranteeing safe intersection interactions properly triggering data correctly.
+  async function extractProfileDataWhenReady() {
+    const immediate = extractProfileData();
+    if (profileDataIsRich(immediate)) return immediate;
+
+    const savedScrollY = window.scrollY;
+
+    const scrollContainer =
+      document.querySelector("div.scaffold-layout__main") ||
+      document.querySelector("main") ||
+      null;
+
+    // Forces scroll coordinates iteratively mimicking user views directly.
+    function scrollTo(y) {
+      if (scrollContainer) {
+        scrollContainer.scrollTop = y;
+      }
+      window.scrollTo({ top: y, behavior: "instant" });
+    }
+
+    const steps = [400, 800, 1200, 1800, 2600, 3600];
+    let data = immediate;
+
+    // Awaits dynamically letting virtual DOMs render nodes correctly inside containers passively.
+    for (const y of steps) {
+      scrollTo(y);
+      await new Promise(r => setTimeout(r, 300));
+      data = extractProfileData();
+      if (profileDataIsRich(data)) break;
+    }
+
+    // Falls back slightly rendering nodes conditionally providing extraction final iterations passively.
+    if (!profileDataIsRich(data)) {
+      await new Promise(r => setTimeout(r, 800));
+      data = extractProfileData();
+    }
+
+    scrollTo(savedScrollY);
+
+    return data;
+  }
+
+  // Triggers personal profile fetching asynchronously storing baseline analytics permanently directly server-side eventually.
   async function syncOwnProfile() {
     if (!isExtensionValid() || !isProfilePage(window.location.href)) return;
 
@@ -371,7 +417,7 @@
     const uid = await ensureUserId();
     if (!uid) return;
 
-    const profileData = extractProfileData();
+    const profileData = await extractProfileDataWhenReady();
     if (!profileData.name || profileData.name === "Unknown") return;
 
     try {
@@ -382,7 +428,6 @@
       });
       if (resp.ok) {
         await chrome.storage.local.set({ lia_last_sync: Date.now(), lia_user_synced: true });
-        // Remove toast if visible
         const toast = document.getElementById(`${UI_PREFIX}-onboarding-toast`);
         if (toast) {
           toast.classList.remove("lia-toast-visible");
@@ -395,14 +440,13 @@
     }
   }
 
-  // ════════════════════════════════════════════════════════════════
-  //  USER ID
-  // ════════════════════════════════════════════════════════════════
+  // Evaluates cryptographically randomized UUID generation conditionally managing keys explicitly randomly.
   function generateUUID() {
     return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
       (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
   }
 
+  // Securely coordinates async session identifiers ensuring user profiles remain uniquely accessible independently reliably.
   async function ensureUserId() {
     if (userId) return userId;
     if (!isExtensionValid()) return null;
@@ -414,9 +458,7 @@
     } catch { return null; }
   }
 
-  // ════════════════════════════════════════════════════════════════
-  //  MESSAGE HANDLER  (side panel requests profile data)
-  // ════════════════════════════════════════════════════════════════
+  // Responds explicitly handling page extraction queries securely responding gracefully catching async operations globally directly.
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!isExtensionValid()) return;
 
@@ -430,38 +472,34 @@
       const onProfilePage = isProfilePage(url);
 
       if (onProfilePage) {
-        ensureUserId().then(uid => {
+        ensureUserId().then(async uid => {
+          const profileData = await extractProfileDataWhenReady();
           sendResponse({
             isProfilePage: true,
             url,
-            profileData: extractProfileData(),
+            profileData,
             userId: uid || "",
           });
         });
-        return true; // keep channel open for async response
+        return true; 
       } else {
         sendResponse({ isProfilePage: false, url });
       }
     }
   });
 
-  // ════════════════════════════════════════════════════════════════
-  //  BOOTSTRAP
-  // ════════════════════════════════════════════════════════════════
+  // Initializes primary listeners sequentially initiating FAB tracking dynamically waiting efficiently internally globally.
   setupNavigationListener();
   lastUrl = cleanUrl(window.location.href);
 
-  // FAB on every LinkedIn page
   setTimeout(() => { injectFab(); watchFab(); }, 1000);
 
-  // If this is already a profile page on initial load, wait for DOM then signal
   if (isProfilePage(window.location.href)) {
     setTimeout(() => waitForProfileDOM(lastUrl), 1500);
     setTimeout(syncOwnProfile, 4000);
   } else {
-    // Toast on non-profile pages
     setTimeout(maybeShowOnboardingToast, 3000);
   }
 
-  console.log("[LinkedIn Analyzer] v3.4 content script loaded with polling fix.");
+  console.log("[LinkedIn Analyzer] v3.4 content script loaded with lazy-section fix.");
 })();

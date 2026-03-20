@@ -1,24 +1,18 @@
-/**
- * LinkedIn Profile Analyzer — Side Panel Script  v3.2
- *
- * Bug 2 fix: side panel directly watches chrome.tabs.onUpdated
- *            instead of relying on background relay (which was
- *            unreliable due to service worker termination).
- * Bug 4 fix: listens for "requestClose" from background and calls
- *            window.close(); sends "panelClosed" on unload.
- */
+// LinkedIn Profile Analyzer Side Panel Script.
+// Responsible for rendering profile metadata dynamically within extension side panels directly.
 
 "use strict";
 
+// Declares the primary backend server endpoint.
 const BACKEND_URL = "http://localhost:5000/analyze";
 
-// ── State ─────────────────────────────────────────────────────────
+// Maintains active panel states globally within local tracking scopes.
 let currentProfileData = null;
 let currentUserId = null;
 let currentUrl = "";
-let linkedInTabId = null;   // the specific LinkedIn tab this panel serves
+let linkedInTabId = null;
 
-// ── DOM refs ──────────────────────────────────────────────────────
+// Maps standard HTML sections explicitly onto internal constants respectively.
 const views = {
   "no-profile": document.getElementById("view-no-profile"),
   "idle": document.getElementById("view-idle"),
@@ -27,13 +21,14 @@ const views = {
   "error": document.getElementById("view-error"),
 };
 
+// Toggles active CSS states rendering requested views iteratively seamlessly.
 function showView(name) {
   Object.entries(views).forEach(([k, el]) => {
     el.classList.toggle("active", k === name);
   });
 }
 
-// ── Tabs ──────────────────────────────────────────────────────────
+// Binds internal tab components responding appropriately handling interactive elements seamlessly.
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
@@ -43,13 +38,13 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
   });
 });
 
-// ── Button listeners ──────────────────────────────────────────────
+// Attaches click handlers explicitly binding buttons onto designated analysis properties.
 document.getElementById("refresh-btn").addEventListener("click", initPanel);
 document.getElementById("retry-btn").addEventListener("click", runAnalysis);
 document.getElementById("re-analyze-btn").addEventListener("click", runAnalysis);
 document.getElementById("analyze-btn").addEventListener("click", runAnalysis);
 
-// ── Copy / Send ───────────────────────────────────────────────────
+// Listens broadly supporting intuitive copy/send clipboard functionalities seamlessly.
 document.addEventListener("click", e => {
   const copyBtn = e.target.closest(".copy-btn");
   if (copyBtn) {
@@ -67,15 +62,9 @@ document.addEventListener("click", e => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────
-//  TAB RESOLUTION
-//  Side panel has "tabs" permission so it can query directly.
-//  NEVER use { currentWindow: true } — that resolves to the side
-//  panel's own detached window, not the LinkedIn tab.
-// ─────────────────────────────────────────────────────────────────
+// Queries actively resolving relevant LinkedIn tabs robustly circumventing context isolation errors properly.
 function resolveLinkedInTab() {
   return new Promise(resolve => {
-    // Try the cached tab first
     if (linkedInTabId !== null) {
       chrome.tabs.get(linkedInTabId, tab => {
         if (chrome.runtime.lastError || !tab?.url?.includes("linkedin.com")) {
@@ -87,10 +76,8 @@ function resolveLinkedInTab() {
       });
       return;
     }
-    // Query across ALL windows (not just currentWindow)
     chrome.tabs.query({ url: "*://*.linkedin.com/*" }, tabs => {
       if (!tabs.length) { resolve(null); return; }
-      // Prefer the active tab among LinkedIn tabs
       const active = tabs.find(t => t.active) || tabs[0];
       linkedInTabId = active.id;
       resolve(active);
@@ -98,6 +85,7 @@ function resolveLinkedInTab() {
   });
 }
 
+// Passes standard page context queries targeting active tab contexts directly internally safely.
 function fetchPageInfo() {
   return resolveLinkedInTab().then(tab => {
     if (!tab?.id) return null;
@@ -110,36 +98,21 @@ function fetchPageInfo() {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────
-//  NAVIGATION DETECTION  (v3.3 fix)
-//
-//  Instead of guessing timing with chrome.tabs.onUpdated (which fires
-//  multiple times per LinkedIn SPA navigation and can have stale URLs),
-//  the content script now signals us:
-//    "profileReady"  — profile <h1> is confirmed in the DOM; extract now
-//    "pageChanged"   — navigated to a non-profile page
-//
-//  This eliminates all race conditions and fixed-delay guesswork.
-// ─────────────────────────────────────────────────────────────────
+// Responds robustly rendering internal UI changes conditionally matching relayed content properties conditionally.
 chrome.runtime.onMessage.addListener((msg) => {
-  // Store the LinkedIn tab ID whenever it's relayed from background
   if (msg.tabId) linkedInTabId = msg.tabId;
 
   if (msg.action === "profileReady") {
-    // DOM is confirmed ready — fetch and display immediately, no retry needed
     fetchPageInfo().then(info => {
       if (info?.profileData?.name && info.profileData.name !== "Unknown") {
         applyProfileData(info);
       } else {
-        // Fallback: profile signalled ready but extraction returned empty —
-        // run the full initPanel which has its own short retry loop
         initPanel();
       }
     });
   }
 
   if (msg.action === "pageChanged") {
-    // Non-profile page — show the "prospecting" screen immediately
     currentProfileData = null;
     showView("no-profile");
   }
@@ -149,16 +122,14 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────
-//  INIT PANEL  (retry loop for SPA DOM timing)
-// ─────────────────────────────────────────────────────────────────
+// Tracks explicit DOM polling iterations resolving SPA latency cleanly locally automatically.
 const DOM_RETRIES = 15;
 const DOM_RETRY_MS = 800;
 
+// Initializes primary states evaluating initial DOM structures robustly retrying consistently sequentially.
 async function initPanel() {
   showView("loading");
 
-  // Step 1: get page type
   let info = await fetchPageInfo();
   if (!info) {
     await sleep(1500);
@@ -174,7 +145,6 @@ async function initPanel() {
     return;
   }
 
-  // Step 2: profile page confirmed — wait for DOM to render
   for (let i = 0; i < DOM_RETRIES; i++) {
     const data = await fetchPageInfo();
     if (data?.profileData?.name && data.profileData.name !== "Unknown") {
@@ -187,6 +157,7 @@ async function initPanel() {
   showView("no-profile");
 }
 
+// Populates structural UI elements assigning generic properties retrieved accurately locally successfully.
 function applyProfileData(info) {
   currentProfileData = info.profileData || null;
   currentUserId = info.userId || "";
@@ -201,15 +172,30 @@ function applyProfileData(info) {
   showView("idle");
 }
 
-// ─────────────────────────────────────────────────────────────────
-//  RUN ANALYSIS
-// ─────────────────────────────────────────────────────────────────
+// Executes comprehensive API inquiries requesting parsed insight profiles formatting successfully actively organically.
 async function runAnalysis() {
-  if (!currentProfileData) {
-    await initPanel();
-    if (!currentProfileData) return;
-  }
   showView("loading");
+
+  let freshInfo = null;
+  for (let i = 0; i < 5; i++) {
+    freshInfo = await fetchPageInfo();
+    if (freshInfo?.profileData?.name && freshInfo.profileData.name !== "Unknown") {
+      break;
+    }
+    await sleep(800);
+  }
+
+  if (!freshInfo?.isProfilePage || !freshInfo?.profileData) {
+    document.getElementById("error-msg").textContent =
+      "Could not read profile data. Make sure you are on a LinkedIn profile page.";
+    showView("error");
+    return;
+  }
+
+  currentProfileData = freshInfo.profileData;
+  currentUserId = freshInfo.userId || currentUserId || "";
+  currentUrl = freshInfo.url || currentUrl;
+
   try {
     const response = await fetch(BACKEND_URL, {
       method: "POST",
@@ -230,9 +216,7 @@ async function runAnalysis() {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-//  RENDER RESULTS
-// ─────────────────────────────────────────────────────────────────
+// Constructs explicit internal HTML node trees assembling analytical scores dynamically.
 function renderResults(result) {
   const about = result.about_profile || {};
   const appr = result.approach_person || {};
@@ -316,49 +300,55 @@ function renderResults(result) {
   }
 }
 
-// Notify background when panel unloads (Bug 4 fix)
+// Broadcasts graceful termination indicators closing loose contextual loops comprehensively.
 window.addEventListener("unload", () => {
   chrome.runtime.sendMessage({ action: "panelClosed", tabId: linkedInTabId }).catch(() => { });
 });
 
-// ─────────────────────────────────────────────────────────────────
-//  HELPERS
-// ─────────────────────────────────────────────────────────────────
+// Implements secure contextual filtering actively isolating user rendered variables flawlessly.
 function esc(str) {
   if (!str) return "";
   const d = document.createElement("div");
   d.textContent = str;
   return d.innerHTML;
 }
+
+// Maps generic structural properties handling reserved DOM keywords correctly successfully.
 function escAttr(str) {
   return (str || "")
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;")
     .replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+
+// Safely reconstructs mapped internal attribute replacements parsing native strings clearly.
 function decodeAttr(str) {
   return (str || "")
     .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 }
+
+// Crafts dynamic HTML node injections returning organized card components safely.
 function card(title, body, extraClass = "") {
   return `<div class="card ${extraClass}"><h4>${title}</h4>${body}</div>`;
 }
+
+// Returns inline SVG tags effectively drawing intuitive copy actions beautifully.
 function copyIcon() {
   return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <rect x="9" y="9" width="13" height="13" rx="2"/>
     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
 }
+
+// Returns inline SVG fragments mapping generic arrow representations correctly nicely.
 function sendIcon() {
   return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
 }
+
+// Awaits sequentially with standard asynchronous setTimeout calls correctly pausing workflows predictability.
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// ─────────────────────────────────────────────────────────────────
-//  BOOT
-// ─────────────────────────────────────────────────────────────────
-
-// Find our LinkedIn tab first, then initialize
+// Resolves generic LinkedIn elements gracefully opening panel behaviors organically cleanly.
 resolveLinkedInTab().then(tab => {
   if (tab) linkedInTabId = tab.id;
   initPanel();

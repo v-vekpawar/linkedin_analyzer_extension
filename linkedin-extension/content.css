@@ -1,9 +1,5 @@
-/**
- * LinkedIn Profile Analyzer — Content CSS  v3.2
- * ==============================================
- * Styles injected into LinkedIn's page.
- * Covers: FAB trigger button + onboarding toast.
- */
+/* Injected CSS configuring floating tool buttons and onboarding popups dynamically. */
+/* Defines global palette constants natively supporting dark palettes explicitly. */
 
 :root {
   --lia-primary:    #414348;
@@ -12,7 +8,7 @@
   --lia-ease:       cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ══ Floating Action Button ════════════════════════════════════════ */
+/* Positions fixed action buttons rendering them consistently above native LinkedIn content. */
 #lia-fab {
   position: fixed;
   top:   50%;
@@ -40,16 +36,19 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* Expands floating button dimensions and shadows on active hover states. */
 #lia-fab:hover {
   width:      58px;
   background: var(--lia-primary-dk);
   box-shadow: -4px 0 20px rgba(65, 67, 72, 0.50);
 }
 
+/* Mimics click behaviors organically scaling the button downward. */
 #lia-fab:active {
   transform: translateY(-50%) scale(0.94);
 }
 
+/* Scales internal FAB icons centrally preventing undesired image distortion. */
 #lia-fab img {
   width:  30px;
   height: 30px;
@@ -59,10 +58,7 @@
   flex-shrink:    0;
 }
 
-/* ══ Onboarding Toast (Bug 1 fix) ══════════════════════════════════
-   Injected into LinkedIn's DOM by content.js.
-   "Go to My Profile" navigates in the SAME tab via window.location.href.
-═══════════════════════════════════════════════════════════════════ */
+/* Constructs hidden toast dialogs placing overlays centrally on active browser tabs. */
 #lia-onboarding-toast {
   position: fixed;
   bottom: 28px;
@@ -87,12 +83,14 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* Exposes toast elements clearly animating into view dynamically during execution. */
 #lia-onboarding-toast.lia-toast-visible {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
   pointer-events: auto;
 }
 
+/* Formats contained toast wrappers grouping elements uniformly. */
 .lia-toast-inner {
   display: flex;
   align-items: flex-start;
@@ -100,6 +98,7 @@
   padding: 16px;
 }
 
+/* Styles internal popup brand logos displaying visual contexts intelligently. */
 .lia-toast-logo {
   width:  36px;
   height: 36px;
@@ -109,11 +108,13 @@
   filter: brightness(1.2);
 }
 
+/* Scales flex content objects allowing wrapping paragraphs natively. */
 .lia-toast-content {
   flex: 1;
   min-width: 0;
 }
 
+/* Enforces readable contrast bolding inline headers explicitly. */
 .lia-toast-content strong {
   display: block;
   font-size: 13px;
@@ -122,6 +123,7 @@
   margin-bottom: 3px;
 }
 
+/* Formats underlying instructional text strings rendering appropriately within dialogs. */
 .lia-toast-content p {
   font-size: 12px;
   color: #b8b9bc;
@@ -129,12 +131,14 @@
   margin: 0;
 }
 
+/* Distributes inline call-to-action choices logically below content. */
 .lia-toast-actions {
   display: flex;
   gap: 8px;
   padding: 0 16px 14px 16px;
 }
 
+/* Styles dialog interaction buttons rendering cohesive interactive targets locally. */
 .lia-toast-btn {
   padding: 8px 16px;
   border-radius: 50px;
@@ -146,24 +150,29 @@
   transition: background 0.18s, color 0.18s, transform 0.15s;
 }
 
+/* Evaluates interactive button active scales safely animating inputs conditionally. */
 .lia-toast-btn:active {
   transform: scale(0.96);
 }
 
+/* Assigns explicit visual brand weight indicating dominant popup selections explicitly. */
 .lia-toast-btn-primary {
   background: var(--lia-bg);
   color:      var(--lia-primary);
 }
 
+/* Amplifies highlighted dialog buttons enhancing interactive background affordances predictably. */
 .lia-toast-btn-primary:hover {
   background: #ffffff;
 }
 
+/* Specifies subtle visual priorities applying dark muted contrasts seamlessly securely. */
 .lia-toast-dismiss {
   background: rgba(255, 255, 255, 0.12);
   color:      #b8b9bc;
 }
 
+/* Invokes noticeable hover states applying muted transparency efficiently actively dynamically. */
 .lia-toast-dismiss:hover {
   background: rgba(255, 255, 255, 0.20);
   color:      #f8f4ea;

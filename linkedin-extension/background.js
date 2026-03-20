@@ -1,70 +1,60 @@
-/**
- * LinkedIn Profile Analyzer — Background Service Worker  v3.2
- *
- * Bug 3 fix: set global sidePanel default to disabled at startup,
- *            then enable only on LinkedIn tabs.
- * Bug 4 fix: track panel-open state in chrome.storage.session
- *            (survives service-worker restarts); send "requestClose"
- *            to the side panel so it can call window.close().
- *
- * NOTE: pageChanged relay REMOVED — side panel now uses
- *       chrome.tabs.onUpdated directly (no relay needed, more reliable).
- */
+// Background Service Worker for LinkedIn Profile Analyzer.
+// Manages global side panel state and handles messaging.
 
 "use strict";
 
-// ── Global: disable side panel on ALL tabs by default (Bug 3 fix) ──
-// This overrides the manifest's default_path which would enable it everywhere.
+// Disables the side panel globally by default.
+// Ensures it only activates on valid LinkedIn tabs.
 chrome.sidePanel.setOptions({ path: "sidepanel.html", enabled: false });
 
-// ── Panel-open state ──────────────────────────────────────────────
-// Kept in-memory (Map) so the toggle check is SYNCHRONOUS.
-// chrome.sidePanel.open() must be called in the same synchronous turn
-// as the user gesture — any await before it breaks the gesture context.
+// Stores the open/closed state of the side panel per tab.
+// Allows synchronous toggling without breaking user gestures.
 const panelOpenTabs = new Map();
 
-// ── Message router ────────────────────────────────────────────────
+// Listens for messages from the content script and side panel.
+// Routes actions like toggling the panel or relaying profile status.
 chrome.runtime.onMessage.addListener((msg, sender) => {
   const tabId = sender.tab?.id;
 
-  // FAB clicked — toggle the side panel synchronously (Bug 4 fix)
+  // Handles 'openSidePanel' action by toggling synchronous visibility.
+  // Sends a close request if open, or opens the panel using the API.
   if (msg.action === "openSidePanel" && tabId) {
     if (panelOpenTabs.get(tabId)) {
-      // Panel is open — ask it to close itself via window.close()
       chrome.runtime.sendMessage({ action: "requestClose" }).catch(() => { });
       panelOpenTabs.set(tabId, false);
     } else {
-      // MUST be synchronous — no await before this line
       chrome.sidePanel.open({ tabId });
       panelOpenTabs.set(tabId, true);
     }
     return;
   }
 
-  // Side panel reporting it closed (window unload)
+  // Receives 'panelClosed' signal from the closed window.
+  // Updates the internal map to mark the panel as closed.
   if (msg.action === "panelClosed") {
     const tid = msg.tabId || tabId;
     if (tid) panelOpenTabs.set(tid, false);
     return;
   }
 
-  // Side panel reporting it is ready / just opened
+  // Receives 'panelReady' signal from a newly opened side panel.
+  // Updates the internal map to mark the panel as ready and open.
   if (msg.action === "panelReady") {
     const tid = msg.tabId || tabId;
     if (tid) panelOpenTabs.set(tid, true);
     return;
   }
 
-  // Content script signals — relay to side panel with sender's tabId stamped in
-  // "profileReady": profile <h1> is confirmed rendered in DOM — safe to extract
-  // "pageChanged":  navigated to a non-profile page
+  // Relays 'profileReady' or 'pageChanged' events from content scripts.
+  // Forwards these events to the side panel with the sender's tabId.
   if (msg.action === "profileReady" || msg.action === "pageChanged") {
     chrome.runtime.sendMessage({ ...msg, tabId: tabId || null }).catch(() => { });
     return;
   }
 });
 
-// ── Per-tab panel policy: enable only on LinkedIn (Bug 3 fix) ─────
+// Enables the side panel only for URLs that belong to LinkedIn.
+// Reverts the panel's internal state to closed if navigating away.
 function applyPanelPolicy(tabId, url) {
   const onLinkedIn = typeof url === "string" && url.includes("linkedin.com");
   chrome.sidePanel.setOptions({
@@ -76,19 +66,20 @@ function applyPanelPolicy(tabId, url) {
   if (!onLinkedIn) panelOpenTabs.set(tabId, false);
 }
 
-// Apply policy when any tab finishes loading or its url changes
+// Applies side panel policy when a tab's URL changes or updating finishes.
+// Notifies content scripts of URL changes to trigger navigation logic.
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === "complete" || changeInfo.url) {
     applyPanelPolicy(tabId, tab.url);
   }
 
-  // Relay URL changes to the content script so it can re-run its SPA logic
   if (changeInfo.url && typeof changeInfo.url === "string" && changeInfo.url.includes("linkedin.com")) {
     chrome.tabs.sendMessage(tabId, { action: "urlChanged", url: changeInfo.url }).catch(() => { });
   }
 });
 
-// Apply policy when user switches tabs
+// Re-evaluates panel availability whenever the user switches tabs.
+// Ensures accurate side panel visibility based on the active tab's URL.
 chrome.tabs.onActivated.addListener(({ tabId }) => {
   chrome.tabs.get(tabId, tab => {
     if (chrome.runtime.lastError) return;
@@ -96,12 +87,14 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
   });
 });
 
-// Clean up when tab closes
+// Cleans up memory by removing the stored open state when a tab closes.
+// Prevents memory leaks by maintaining accurate state tracking.
 chrome.tabs.onRemoved.addListener(tabId => {
   panelOpenTabs.delete(tabId);
 });
 
-// ── First-install ─────────────────────────────────────────────────
+// Automatically opens a LinkedIn feed tab on extension installation.
+// Streamlines onboarding by redirecting users to a relevant page.
 chrome.runtime.onInstalled.addListener(details => {
   if (details.reason === "install") {
     chrome.tabs.create({ url: "https://www.linkedin.com/feed/" });
