@@ -20,27 +20,24 @@ def _hash_url(profile_url: str) -> str:
     return hashlib.sha256(profile_url.strip().lower().encode()).hexdigest()
 
 
-def get_cached_analysis(profile_url: str) -> dict | None:
+def get_cached_analysis(profile_url: str, user_id: str) -> dict | None:
     """
-    Look up a cached analysis by profile URL.
-    Returns the result dict if a valid (non-expired) cache entry exists,
-    otherwise returns None.
-    Expired entries are lazily deleted on lookup.
+    Look up a cached analysis by profile URL and user_id to ensure complete privacy.
     """
     url_hash = _hash_url(profile_url)
 
-    entry = AnalysisCache.query.filter_by(profile_url_hash=url_hash).first()
+    entry = AnalysisCache.query.filter_by(profile_url_hash=url_hash, user_id=user_id).first()
     if entry is None:
         return None
 
     # Lazy expiration — delete stale row and treat as miss
     if entry.is_expired:
-        logger.info("Cache expired for %s — removing", entry.profile_name)
+        logger.info("Cache expired for %s (User %s) — removing", entry.profile_name, user_id)
         db.session.delete(entry)
         db.session.commit()
         return None
 
-    logger.info("Cache HIT for %s", entry.profile_name)
+    logger.info("Cache HIT for %s (User %s)", entry.profile_name, user_id)
     return entry.to_result_dict()
 
 
@@ -50,18 +47,17 @@ def store_analysis(
     about_profile: dict,
     approach_person: dict,
     compatibility_score: dict | None,
-    user_id: str | None,
+    user_id: str,
     model: str,
 ) -> None:
     """
-    Store (or overwrite) a cached analysis result for a profile URL.
-    If an existing row exists for this URL, it is replaced.
+    Store (or overwrite) a cached analysis result strictly for this user_id.
     """
     url_hash = _hash_url(profile_url)
 
     try:
-        # Upsert: delete old entry if exists, then insert fresh
-        existing = AnalysisCache.query.filter_by(profile_url_hash=url_hash).first()
+        # Upsert: delete old entry if exists for THIS user, then insert fresh
+        existing = AnalysisCache.query.filter_by(profile_url_hash=url_hash, user_id=user_id).first()
         if existing:
             db.session.delete(existing)
             db.session.flush()

@@ -54,16 +54,20 @@ class AnalysisCache(db.Model):
     __tablename__ = "analysis_cache"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    profile_url_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    profile_url_hash = db.Column(db.String(64), nullable=False, index=True)
     profile_name = db.Column(db.String(255), default="")
     about_profile = db.Column(db.Text, nullable=False)          # JSON-serialized
     approach_person = db.Column(db.Text, nullable=False)        # JSON-serialized
     compatibility_score = db.Column(db.Text, nullable=True)     # JSON-serialized (nullable)
-    user_id = db.Column(db.String(36), nullable=True)
+    user_id = db.Column(db.String(36), nullable=False, index=True)
     model = db.Column(db.String(50), default="")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime, nullable=False, index=True,
                            default=lambda: datetime.utcnow() + timedelta(days=CACHE_TTL_DAYS))
+
+    __table_args__ = (
+        db.UniqueConstraint("profile_url_hash", "user_id", name="uix_profile_user"),
+    )
 
     @property
     def is_expired(self):
