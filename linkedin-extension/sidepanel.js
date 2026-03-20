@@ -4,8 +4,8 @@
 "use strict";
 
 // Declares the primary backend server endpoint.
-const BACKEND_URL = "http://localhost:5000/analyze";
-// const BACKEND_URL = "https://your-render-app-url.onrender.com/analyze"; // Replace with your Render URL
+// const BACKEND_URL = "http://localhost:5000/analyze";
+const BACKEND_URL = "https://la-extension-backend.onrender.com/analyze"; // Replace with your Render URL
 
 // Maintains active panel states globally within local tracking scopes.
 let currentProfileData = null;

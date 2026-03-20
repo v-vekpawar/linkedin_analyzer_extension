@@ -7,8 +7,8 @@
   // Identifiers used for extension UI elements.
   // URL to save synced data to the backend locally.
   const UI_PREFIX = "lia";
-  const SAVE_PROFILE_URL = "http://localhost:5000/save-user-profile";
-  // const SAVE_PROFILE_URL = "https://your-render-app-url.onrender.com/save-user-profile"; // Replace with your Render URL
+  // const SAVE_PROFILE_URL = "http://localhost:5000/save-user-profile";
+  const SAVE_PROFILE_URL = "https://la-extension-backend.onrender.com/save-user-profile"; // Replace with your Render URL
 
   // State variables for routing and tracking current sessions.
   // Helps determine navigation states to watch the DOM effectively.
