@@ -8,6 +8,7 @@
   // URL to save synced data to the backend locally.
   const UI_PREFIX = "lia";
   const SAVE_PROFILE_URL = "http://localhost:5000/save-user-profile";
+  // const SAVE_PROFILE_URL = "https://your-render-app-url.onrender.com/save-user-profile"; // Replace with your Render URL
 
   // State variables for routing and tracking current sessions.
   // Helps determine navigation states to watch the DOM effectively.
@@ -61,11 +62,18 @@
     lastUrl = url;
 
     if (profileObserver) { profileObserver.disconnect(); profileObserver = null; }
+    
+    // Hide FAB if not on profile page
+    const fab = document.getElementById(`${UI_PREFIX}-fab`);
+    if (!isProfilePage(url) && fab) {
+        fab.remove();
+    }
 
     if (!isExtensionValid()) return;
 
     if (isProfilePage(url)) {
       waitForProfileDOM(url);
+      injectFab(); // Ensure FAB is injected if it's a profile page
     } else {
       chrome.runtime.sendMessage({ action: "pageChanged", url, isProfilePage: false }).catch(() => { });
     }
@@ -139,6 +147,7 @@
   // Triggers 'openSidePanel' events enabling analyzers seamlessly for profiles.
   function injectFab() {
     if (!isExtensionValid()) return;
+    if (!isProfilePage(window.location.href)) return; // Only inject on profile pages
     if (document.getElementById(`${UI_PREFIX}-fab`)) return;
 
     const fab = document.createElement("button");
@@ -355,7 +364,7 @@
   }
 
   // Scrolls strategically rendering virtual react arrays guaranteeing safe intersection interactions properly triggering data correctly.
-  async function extractProfileDataWhenReady() {
+  async function extractProfileDataWhenReady(forceScroll = false) {
     const immediate = extractProfileData();
     if (profileDataIsRich(immediate)) return immediate;
 
@@ -374,15 +383,18 @@
       window.scrollTo({ top: y, behavior: "instant" });
     }
 
-    const steps = [400, 800, 1200, 1800, 2600, 3600];
     let data = immediate;
+    
+    if (forceScroll) {
+      const steps = [400, 800, 1200, 1800, 2600, 3600];
 
-    // Awaits dynamically letting virtual DOMs render nodes correctly inside containers passively.
-    for (const y of steps) {
-      scrollTo(y);
-      await new Promise(r => setTimeout(r, 300));
-      data = extractProfileData();
-      if (profileDataIsRich(data)) break;
+      // Awaits dynamically letting virtual DOMs render nodes correctly inside containers passively.
+      for (const y of steps) {
+        scrollTo(y);
+        await new Promise(r => setTimeout(r, 300));
+        data = extractProfileData();
+        if (profileDataIsRich(data)) break;
+      }
     }
 
     // Falls back slightly rendering nodes conditionally providing extraction final iterations passively.
@@ -391,23 +403,26 @@
       data = extractProfileData();
     }
 
-    scrollTo(savedScrollY);
+    if (forceScroll) {
+       scrollTo(savedScrollY);
+    }
 
     return data;
+  }
+
+  function isUsersOwnProfile() {
+    return !!document.querySelector("button[aria-label='Open to']") ||
+      !!document.querySelector("button[aria-label='Add profile section']") ||
+      !!document.querySelector("button[aria-label='Edit intro']") ||
+      !!document.querySelector(".pv-top-card--edit-name-pencil") ||
+      !!document.querySelector("#profile-edit-toggle");
   }
 
   // Triggers personal profile fetching asynchronously storing baseline analytics permanently directly server-side eventually.
   async function syncOwnProfile() {
     if (!isExtensionValid() || !isProfilePage(window.location.href)) return;
 
-    const isOwnProfile =
-      !!document.querySelector("button[aria-label='Open to']") ||
-      !!document.querySelector("button[aria-label='Add profile section']") ||
-      !!document.querySelector("button[aria-label='Edit intro']") ||
-      !!document.querySelector(".pv-top-card--edit-name-pencil") ||
-      !!document.querySelector("#profile-edit-toggle");
-
-    if (!isOwnProfile) return;
+    if (!isUsersOwnProfile()) return;
 
     try {
       const stored = await chrome.storage.local.get("lia_last_sync");
@@ -417,7 +432,8 @@
     const uid = await ensureUserId();
     if (!uid) return;
 
-    const profileData = await extractProfileDataWhenReady();
+    // When syncing own profile in background, we can force scroll to get all data
+    const profileData = await extractProfileDataWhenReady(true);
     if (!profileData.name || profileData.name === "Unknown") return;
 
     try {
@@ -473,9 +489,13 @@
 
       if (onProfilePage) {
         ensureUserId().then(async uid => {
-          const profileData = await extractProfileDataWhenReady();
+          const isOwn = isUsersOwnProfile();
+          // Do not force scroll if this is just getting page info for the manual click (which annoys user),
+          // although for own profile sync we allow force scroll to capture all data.
+          const profileData = await extractProfileDataWhenReady(false);
           sendResponse({
             isProfilePage: true,
+            isOwnProfile: isOwn,
             url,
             profileData,
             userId: uid || "",
@@ -483,7 +503,7 @@
         });
         return true; 
       } else {
-        sendResponse({ isProfilePage: false, url });
+        sendResponse({ isProfilePage: false, url, isOwnProfile: false });
       }
     }
   });

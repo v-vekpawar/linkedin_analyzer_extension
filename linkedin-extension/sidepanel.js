@@ -5,12 +5,14 @@
 
 // Declares the primary backend server endpoint.
 const BACKEND_URL = "http://localhost:5000/analyze";
+// const BACKEND_URL = "https://your-render-app-url.onrender.com/analyze"; // Replace with your Render URL
 
 // Maintains active panel states globally within local tracking scopes.
 let currentProfileData = null;
 let currentUserId = null;
 let currentUrl = "";
 let linkedInTabId = null;
+let isOwnProfile = false;
 
 // Maps standard HTML sections explicitly onto internal constants respectively.
 const views = {
@@ -128,6 +130,7 @@ const DOM_RETRY_MS = 800;
 
 // Initializes primary states evaluating initial DOM structures robustly retrying consistently sequentially.
 async function initPanel() {
+  document.getElementById("loading-status").innerText = "Loading Profile Data...";
   showView("loading");
 
   let info = await fetchPageInfo();
@@ -162,6 +165,7 @@ function applyProfileData(info) {
   currentProfileData = info.profileData || null;
   currentUserId = info.userId || "";
   currentUrl = info.url || currentUrl;
+  isOwnProfile = info.isOwnProfile || false;
 
   const name = currentProfileData?.name || "Unknown";
   const headline = currentProfileData?.headline || "";
@@ -174,6 +178,7 @@ function applyProfileData(info) {
 
 // Executes comprehensive API inquiries requesting parsed insight profiles formatting successfully actively organically.
 async function runAnalysis() {
+  document.getElementById("loading-status").innerText = "Analyzing Profile, this would take a few moments";
   showView("loading");
 
   let freshInfo = null;
@@ -195,6 +200,7 @@ async function runAnalysis() {
   currentProfileData = freshInfo.profileData;
   currentUserId = freshInfo.userId || currentUserId || "";
   currentUrl = freshInfo.url || currentUrl;
+  isOwnProfile = freshInfo.isOwnProfile || false;
 
   try {
     const response = await fetch(BACKEND_URL, {
@@ -235,7 +241,7 @@ function renderResults(result) {
       `<div class="cached-note"><span class="cached-dot"></span>Cached result</div>`);
   }
 
-  if (compat) {
+  if (compat && !isOwnProfile) {
     const score = typeof compat.compatibility_score === "number" ? compat.compatibility_score : "—";
     const whyItems = (compat.why || []).map(r => `<li>${esc(r)}</li>`).join("");
     analysisEl.insertAdjacentHTML("beforeend", `

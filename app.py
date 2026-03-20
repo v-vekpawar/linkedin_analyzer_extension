@@ -107,11 +107,11 @@ def create_flask_app():
                 return jsonify({"error": f"profile_data validation failed: {err}"}), 400
 
             profile_url = data.get("profile_url", "")
-            user_id = data.get("user_id", "")
+            user_id = data.get("user_id", "").strip() or "anonymous"
 
             # ── Cache lookup ──
             if profile_url:
-                cached = get_cached_analysis(profile_url)
+                cached = get_cached_analysis(profile_url, user_id)
                 if cached:
                     logger.info("Returning cached analysis for %s", profile_data["name"])
                     return jsonify(cached), 200
@@ -140,7 +140,7 @@ def create_flask_app():
                         about_profile=result.get("about_profile", {}),
                         approach_person=result.get("approach_person", {}),
                         compatibility_score=result.get("compatibility_score"),
-                        user_id=user_id or None,
+                        user_id=user_id,
                         model=result.get("model", ""),
                     )
                 except Exception as cache_err:
